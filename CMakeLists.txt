@@ -91,8 +91,8 @@ set(SODIUM_LIBRARY_VERSION_MINOR 2)
 configure_file(
     "external/libsodium/src/libsodium/include/sodium/version.h.in"
     "external/libsodium/src/libsodium/include/sodium/version.h")
-file(GLOB_RECURSE sodium_source "external/libsodium/src/libsodium/*.c")
-add_library(libsodium STATIC EXCLUDE_FROM_ALL ${sodium_source})
+file(GLOB_RECURSE libsodium_source "external/libsodium/src/libsodium/*.c")
+add_library(libsodium STATIC EXCLUDE_FROM_ALL ${libsodium_source})
 set_target_properties(libsodium PROPERTIES C_STANDARD 99)
 target_compile_definitions(libsodium PUBLIC -DSODIUM_STATIC)
 target_include_directories(libsodium PUBLIC "external/libsodium/src/libsodium/include")
@@ -173,6 +173,12 @@ set(libpng_private_hdrs
     "external/libpng/pnginfo.h"
     "external/libpng/pngstruct.h")
 set(libpng_sources
+    # ${libpng_arm_sources}
+    # ${libpng_intel_sources}
+    # ${libpng_mips_sources}
+    # ${libpng_powerpc_sources}
+    # ${libpng_loongarch_sources}
+    # ${libpng_riscv_sources}
     ${libpng_public_hdrs}
     ${libpng_private_hdrs}
     "external/libpng/png.c"
@@ -189,15 +195,8 @@ set(libpng_sources
     "external/libpng/pngwio.c"
     "external/libpng/pngwrite.c"
     "external/libpng/pngwtran.c"
-    "external/libpng/pngwutil.c"
-    # ${libpng_arm_sources}
-    # ${libpng_intel_sources}
-    # ${libpng_mips_sources}
-    # ${libpng_powerpc_sources}
-    # ${libpng_loongarch_sources}
-    # ${libpng_riscv_sources}
-    ) # TODO IMPLEMENT OPTIMIZATIONS
-add_library(libpng STATIC ${libpng_sources})
+    "external/libpng/pngwutil.c")
+add_library(libpng STATIC EXCLUDE_FROM_ALL ${libpng_sources})
 target_include_directories(libpng PUBLIC "external/libpng")
 target_include_directories(libpng PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/external/libpng")
 target_link_libraries(libpng PRIVATE zlib)

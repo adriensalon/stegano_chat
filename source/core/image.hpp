@@ -2,13 +2,15 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <vector>
+#include <unordered_map>
 
 struct chat_image {
     std::vector<std::uint8_t> rgb;
     std::size_t width;
     std::size_t height;
-    // TODO add exif metadata
+    std::unordered_map<std::string, std::string> metadata;
 };
 
 void load_image(

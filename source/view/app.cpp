@@ -13,6 +13,7 @@
 #include <view/chat.hpp>
 #include <view/contacts.hpp>
 #include <view/dialog.hpp>
+#include <view/diagram.hpp>
 #include <view/icon.hpp>
 #include <view/login.hpp>
 #include <view/theme.hpp>
@@ -28,27 +29,8 @@ namespace {
 
 void _draw_public_key(const std::array<std::uint8_t, 32>& public_key)
 {
-    ImDrawList* _drawlist = ImGui::GetWindowDrawList();
-    const ImVec2 _cursor_pos = ImGui::GetCursorScreenPos();
-    const float _pixel_size = ImGui::GetContentRegionAvail().x / 16.f;
-    const ImColor color0(212, 212, 212, 212);
-    for (std::uint8_t y = 0; y < 16; ++y) {
-        for (std::uint8_t x = 0; x < 16; ++x) {
-            int bitIndex = y * 16 + x;
-            int byteIndex = bitIndex / 8;
-            int bitInByte = 7 - (bitIndex % 8);
-
-            bool bit = (public_key[byteIndex] >> bitInByte) & 1;
-
-            ImVec2 p0 = { _cursor_pos.x + x * _pixel_size, _cursor_pos.y + y * _pixel_size };
-            ImVec2 p1 = { p0.x + _pixel_size, p0.y + _pixel_size };
-
-            if (bit) {
-                _drawlist->AddRectFilled(p0, p1, color0);
-            }
-        }
-    }
-    ImGui::Dummy({ 16 * _pixel_size, 16 * _pixel_size }); // reserve space
+    const float _size = ImGui::GetContentRegionAvail().x;
+    draw_diagram(public_key, _size);
 }
 
 void _draw_user_settings()
@@ -152,6 +134,8 @@ void draw_app()
         {
             bold_icon_font_scoped _font;
             ImGui::SetCursorPos(ImGui::GetStyle().WindowPadding * 2 + ImVec2(0, 30));
+            draw_diagram(_memory_user->public_key, 50.f);
+            ImGui::SameLine();
             ImGui::TextUnformatted(_memory_username.c_str());
 
             // DEMO

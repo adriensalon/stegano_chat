@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <vector>
+#include <iostream>
 
 #include <png.h>
 
@@ -47,11 +48,27 @@ void load_image(const std::filesystem::path& path, chat_image& image)
     image.width = _width;
     image.height = _height;
     image.rgb.resize(_width * _height * 3);
-    std::vector<png_bytep> rows(_height);
+    std::vector<png_bytep> _rows(_height);
     for (int _row_index = 0; _row_index < _height; ++_row_index) {
-        rows[_row_index] = image.rgb.data() + _row_index * _width * 3;
+        _rows[_row_index] = image.rgb.data() + _row_index * _width * 3;
     }
-    png_read_image(_png_read, rows.data());
+    png_read_image(_png_read, _rows.data());
+
+    // METADATA WIP
+    png_textp _png_text;
+    int _png_text_count;
+    if (png_get_text(_png_read, _png_info, &_png_text, &_png_text_count) > 0) {
+        for (int _text_index = 0; _text_index < _png_text_count; ++_text_index) {
+            const std::string _key(_png_text[_text_index].key);
+            const std::string _value(_png_text[_text_index].text);
+            image.metadata[_key] = _value;
+
+            // DEBUG
+            std::cout << _key << " - " << _value << std::endl;
+        }
+    }
+    // METADATA WIP
+
     fclose(_file_ptr);
     png_destroy_read_struct(&_png_read, &_png_info, nullptr);
 }
@@ -75,6 +92,22 @@ void save_image(const std::filesystem::path& path, const chat_image& image)
     }
     png_init_io(_png_write, _file_ptr);
     png_set_IHDR(_png_write, _png_info, static_cast<png_uint_32>(image.width), static_cast<png_uint_32>(image.height), 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    
+    // METADATA WIP
+    std::vector<png_text> _png_texts;
+    for (const std::pair<const std::string, std::string>& _metadata_pair : image.metadata) {
+        png_text _png_text;
+        _png_text.compression = PNG_TEXT_COMPRESSION_NONE;
+        _png_text.key = const_cast<char*>(_metadata_pair.first.c_str());
+        _png_text.text = const_cast<char*>(_metadata_pair.second.c_str());
+        _png_text.text_length = static_cast<int>(_metadata_pair.second.size());
+        _png_texts.push_back(_png_text);
+    }
+    if (!_png_texts.empty()) {
+        png_set_text(_png_write, _png_info, _png_texts.data(), static_cast<int>(_png_texts.size()));
+    }
+    // METADATA WIP
+    
     png_write_info(_png_write, _png_info);
     std::vector<png_bytep> _rows(image.height);
     for (int _row_index = 0; _row_index < image.height; ++_row_index) {
