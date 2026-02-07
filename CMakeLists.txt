@@ -207,5 +207,7 @@ endif()
 
 # -----------------------------------------------------------------------
 
-add_executable(stegano_chat "source/main.cpp")
+file(GLOB_RECURSE stegano_chat_sources "source/*.cpp")
+add_executable(stegano_chat ${stegano_chat_sources})
 target_link_libraries(stegano_chat PRIVATE cereal glfw imgui libsodium nativefiledialog zlib libpng)
+target_include_directories(stegano_chat PRIVATE "source")
