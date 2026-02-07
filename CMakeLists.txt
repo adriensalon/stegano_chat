@@ -1,0 +1,211 @@
+cmake_minimum_required(VERSION 3.13)
+project(stegano_chat)
+
+# cereal
+add_library(cereal INTERFACE EXCLUDE_FROM_ALL)
+target_include_directories(cereal INTERFACE "external/cereal/include")
+
+# glfw
+set(glfw_main_sources
+    "external/glfw/src/context.c"
+    "external/glfw/src/init.c"
+    "external/glfw/src/input.c"
+    "external/glfw/src/monitor.c"
+    "external/glfw/src/platform.c"
+    "external/glfw/src/vulkan.c"
+    "external/glfw/src/window.c"
+    "external/glfw/src/egl_context.c"
+    "external/glfw/src/osmesa_context.c"
+    "external/glfw/src/null_init.c"
+    "external/glfw/src/null_monitor.c"
+    "external/glfw/src/null_window.c"
+    "external/glfw/src/null_joystick.c")
+if(APPLE)
+    set(glfw_platform_sources
+        "external/glfw/src/cocoa_time.c"
+        "external/glfw/src/posix_module.c"
+        "external/glfw/src/posix_thread.c")
+elseif(WIN32)
+    set(glfw_platform_sources
+        "external/glfw/src/win32_time.c"
+        "external/glfw/src/win32_module.c"
+        "external/glfw/src/win32_thread.c"
+        "external/glfw/src/win32_init.c"
+        "external/glfw/src/win32_joystick.c"
+        "external/glfw/src/win32_monitor.c"
+        "external/glfw/src/win32_window.c"
+        "external/glfw/src/wgl_context.c")    
+else()
+    set(glfw_platform_sources 
+        "external/glfw/src/posix_module.c"
+        "external/glfw/src/posix_time.c"
+        "external/glfw/src/posix_thread.c")
+endif()
+set(glfw_sources ${glfw_main_sources} ${glfw_platform_sources})
+add_library(glfw STATIC EXCLUDE_FROM_ALL ${glfw_sources})
+set_target_properties(glfw PROPERTIES CXX_STANDARD 17)
+target_include_directories(glfw PUBLIC "external/glfw/include")
+target_include_directories(glfw PUBLIC "external/glfw/deps")
+if(WIN32)
+    target_compile_definitions(glfw PRIVATE _GLFW_WIN32)
+endif()
+if(MSVC)
+    target_compile_options(glfw PRIVATE /wd4034)
+    target_compile_options(glfw PRIVATE /wd4996)
+endif()
+
+# imgui
+set(imgui_sources
+	"external/imgui/imgui.cpp"
+	"external/imgui/imgui_widgets.cpp"
+	"external/imgui/imgui_tables.cpp"
+	"external/imgui/imgui_draw.cpp"
+	"external/imgui/imgui_demo.cpp"
+	"external/imgui/misc/cpp/imgui_stdlib.cpp"	
+	"external/imgui/backends/imgui_impl_opengl3.cpp")
+if(ANDROID)
+	set(imgui_sources
+		${imgui_sources}
+		"external/imgui/backends/imgui_impl_android.cpp")
+elseif(WIN32)
+	set(imgui_sources
+		${imgui_sources}
+		"external/imgui/backends/imgui_impl_glfw.cpp")
+endif()
+add_library(imgui STATIC EXCLUDE_FROM_ALL ${imgui_sources})
+set_target_properties(imgui PROPERTIES CXX_STANDARD 17)
+target_compile_definitions(imgui PUBLIC -DIMGUI_USE_WCHAR32)
+target_include_directories(imgui PUBLIC "external/imgui")
+target_include_directories(imgui PUBLIC "external/imgui/backends")
+if(ANDROID)
+	target_link_libraries(imgui PUBLIC GLESv3)
+endif()
+if(WIN32)
+	target_link_libraries(imgui PUBLIC glfw)
+endif()
+
+# libsodium
+set(VERSION 1.0.20)
+set(SODIUM_LIBRARY_VERSION_MAJOR 26)
+set(SODIUM_LIBRARY_VERSION_MINOR 2)
+configure_file(
+    "external/libsodium/src/libsodium/include/sodium/version.h.in"
+    "external/libsodium/src/libsodium/include/sodium/version.h")
+file(GLOB_RECURSE sodium_source "external/libsodium/src/libsodium/*.c")
+add_library(libsodium STATIC EXCLUDE_FROM_ALL ${sodium_source})
+set_target_properties(libsodium PROPERTIES C_STANDARD 99)
+target_compile_definitions(libsodium PUBLIC -DSODIUM_STATIC)
+target_include_directories(libsodium PUBLIC "external/libsodium/src/libsodium/include")
+target_include_directories(libsodium PRIVATE "external/libsodium/src/libsodium/include/sodium")
+if(MSVC)
+    target_compile_definitions(libsodium PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(libsodium PRIVATE /wd4197)
+    target_compile_options(libsodium PRIVATE /wd4244)
+endif()
+
+# nativefiledialog
+set(nativefiledialog_source "external/nativefiledialog/src/nfd_common.c")
+if(WIN32)
+    set(nativefiledialog_source ${nativefiledialog_source} "external/nativefiledialog/src/nfd_win.cpp")
+elseif(LINUX)
+endif()
+add_library(nativefiledialog STATIC EXCLUDE_FROM_ALL ${nativefiledialog_source})
+set_target_properties(nativefiledialog PROPERTIES C_STANDARD 99)
+set_target_properties(nativefiledialog PROPERTIES CXX_STANDARD 17)
+target_include_directories(nativefiledialog PUBLIC "external/nativefiledialog/src/include")
+if(MSVC)
+    target_compile_definitions(nativefiledialog PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+# zlib
+configure_file(	
+    "external/zlib/zconf.h.cmakein"
+    "${CMAKE_CURRENT_BINARY_DIR}/external/zlib/zconf.h" @ONLY)
+set(zlib_public_headers
+    "${CMAKE_CURRENT_BINARY_DIR}/external/zlib/zconf.h"
+    "external/zlib/zlib.h")
+set(zlib_private_headers
+    "external/zlib/crc32.h"
+    "external/zlib/deflate.h"
+    "external/zlib/gzguts.h"
+    "external/zlib/inffast.h"
+    "external/zlib/inffixed.h"
+    "external/zlib/inflate.h"
+    "external/zlib/inftrees.h"
+    "external/zlib/trees.h"
+    "external/zlib/zutil.h")
+set(zlib_sources
+    "external/zlib/adler32.c"
+    "external/zlib/compress.c"
+    "external/zlib/crc32.c"
+    "external/zlib/deflate.c"
+    "external/zlib/gzclose.c"
+    "external/zlib/gzlib.c"
+    "external/zlib/gzread.c"
+    "external/zlib/gzwrite.c"
+    "external/zlib/inflate.c"
+    "external/zlib/infback.c"
+    "external/zlib/inftrees.c"
+    "external/zlib/inffast.c"
+    "external/zlib/trees.c"
+    "external/zlib/uncompr.c"
+    "external/zlib/zutil.c")
+add_library(zlib STATIC EXCLUDE_FROM_ALL ${zlib_sources} ${zlib_public_headers} ${zlib_private_headers})
+target_include_directories(zlib PUBLIC "external/zlib" "${CMAKE_CURRENT_BINARY_DIR}/external/zlib")
+if(MSVC)
+    target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_DEPRECATE)
+    target_compile_definitions(zlib PRIVATE _CRT_NONSTDC_NO_DEPRECATE)
+endif()
+
+# libpng
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/external/libpng/scripts/pnglibconf.h.prebuilt"
+    "${CMAKE_CURRENT_BINARY_DIR}/external/libpng/pnglibconf.h"
+    @ONLY)
+set(libpng_public_hdrs
+    "external/libpng/png.h"
+    "external/libpng/pngconf.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/external/libpng/pnglibconf.h")
+set(libpng_private_hdrs
+    "external/libpng/pngpriv.h"
+    "external/libpng/pngdebug.h"
+    "external/libpng/pnginfo.h"
+    "external/libpng/pngstruct.h")
+set(libpng_sources
+    ${libpng_public_hdrs}
+    ${libpng_private_hdrs}
+    "external/libpng/png.c"
+    "external/libpng/pngerror.c"
+    "external/libpng/pngget.c"
+    "external/libpng/pngmem.c"
+    "external/libpng/pngpread.c"
+    "external/libpng/pngread.c"
+    "external/libpng/pngrio.c"
+    "external/libpng/pngrtran.c"
+    "external/libpng/pngrutil.c"
+    "external/libpng/pngset.c"
+    "external/libpng/pngtrans.c"
+    "external/libpng/pngwio.c"
+    "external/libpng/pngwrite.c"
+    "external/libpng/pngwtran.c"
+    "external/libpng/pngwutil.c"
+    # ${libpng_arm_sources}
+    # ${libpng_intel_sources}
+    # ${libpng_mips_sources}
+    # ${libpng_powerpc_sources}
+    # ${libpng_loongarch_sources}
+    # ${libpng_riscv_sources}
+    ) # TODO IMPLEMENT OPTIMIZATIONS
+add_library(libpng STATIC ${libpng_sources})
+target_include_directories(libpng PUBLIC "external/libpng")
+target_include_directories(libpng PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/external/libpng")
+target_link_libraries(libpng PRIVATE zlib)
+if(MSVC)
+    target_compile_definitions(libpng PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+# -----------------------------------------------------------------------
+
+add_executable(stegano_chat "source/main.cpp")
+target_link_libraries(stegano_chat PRIVATE cereal glfw imgui libsodium nativefiledialog zlib libpng)

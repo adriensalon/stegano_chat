@@ -1,0 +1,10 @@
+^C:\USERS\ADRI\DEV\STEGANO_CHAT\BUILD\CMAKEFILES\6C9BA4B357E631F02EC6BDD06468F45B\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/adri/dev/stegano_chat -BC:/Users/adri/dev/stegano_chat/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/adri/dev/stegano_chat/build/stegano_chat.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
