@@ -5,20 +5,20 @@
 
 namespace {
 
-    static constexpr int _y_red_factor = 77; // 0.299 * 256
-    static constexpr int _y_green_factor = 150; // 0.587 * 256
-    static constexpr int _y_blue_factor = 29; // 0.114 * 256
+static constexpr int _y_red_factor = 77; // 0.299 * 256
+static constexpr int _y_green_factor = 150; // 0.587 * 256
+static constexpr int _y_blue_factor = 29; // 0.114 * 256
 
-    [[nodiscard]] inline bool _ensure_range(const int value)
-    {
-        if (value < 0) {
-            return false;
-        }
-        if (value > 255) {
-            return false;
-        }
-        return true;
+[[nodiscard]] inline bool _ensure_range(const int value)
+{
+    if (value < 0) {
+        return false;
     }
+    if (value > 255) {
+        return false;
+    }
+    return true;
+}
 
 }
 
