@@ -17,8 +17,8 @@
 
 #include <backends/imgui_impl_opengl3.h>
 
-// #include <view/app.hpp>
-// #include <view/theme.hpp>
+#include <view/app.hpp>
+#include <view/theme.hpp>
 
 namespace {
 
@@ -246,8 +246,8 @@ static void _setup_imgui()
     ImGui::StyleColorsLight();
     ImGuiIO& _io = ImGui::GetIO();
     _io.IniFilename = NULL;
-    // install_fonts();
-    // install_theme();
+    install_fonts();
+    install_theme();
     ImGui_ImplOpenGL3_Init("#version 300 es");
 }
 
@@ -282,7 +282,7 @@ static void _update()
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui::NewFrame();
-    // draw_app();
+    draw_app();
     // ImGui::ShowDemoWindow();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
