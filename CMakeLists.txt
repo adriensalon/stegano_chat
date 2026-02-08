@@ -224,6 +224,7 @@ if(EMSCRIPTEN)
         -sINITIAL_MEMORY=671088640
         -sMALLOC=emmalloc
         -lidbfs.js
+        -sASYNCIFY
         -sMAX_WEBGL_VERSION=2
         -sUSE_WEBGL2=1)
     add_custom_command(TARGET stegano_chat POST_BUILD

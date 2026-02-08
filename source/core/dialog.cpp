@@ -1,88 +1,145 @@
 #include <filesystem>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #if defined(__EMSCRIPTEN__)
+#include <atomic>
 #include <emscripten.h>
 #endif
-#if defined(_WIN32)
+
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 #include <nfd.h>
 #endif
 
 namespace {
 
 #if defined(__EMSCRIPTEN__)
-#include <emscripten.h>
+// clang-format off
+EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
+    const _accept = UTF8ToString(types_json);
+    return await new Promise(resolve => {
+        const _element = document.createElement('input');
+        _element.type = 'file';
+        _element.accept = _accept;
+        let _is_dialog_open = false;
+        let _is_done = false;
+        let _timeout = null;
+        function _finish_with_path(path)
+        {
+            const _length = lengthBytesUTF8(path) + 1;
+            const _cstr = _malloc(_length);
+            stringToUTF8(path, _cstr, _length);
+            resolve(_cstr);
+        }
+        _element.addEventListener('change', async () => {
+            if (_is_done) {
+                return;
+            }
+            _is_done = true;
+            clearTimeout(_timeout);
+            if (!_element.files.length) {
+                resolve(0);
+                return;
+            }
+            const _file = _element.files[0];
+            const _buffer = new Uint8Array(await _file.arrayBuffer());
+            const _path = '/tmp/' + _file.name;
+            FS.mkdirTree('/tmp');
+            FS.writeFile(_path, _buffer);
+            _finish_with_path(_path); });
+        _element.addEventListener('click', () => { _is_dialog_open = true; });
+        window.addEventListener('focus', () => {
+            if (!_is_dialog_open || _is_done) {
+                return;
+            }
+            clearTimeout(_timeout);
+            _timeout = setTimeout(() => {
+                if (_is_done) {
+                    return;
+                }
+                _is_done = true;
+                if (!_element.files.length) {
+                    resolve(0);
+                }
+            }, 100); });
+        _element.click();
+    });
+});
+// clang-format on
 
-EM_JS(void, _download_file, (const char* path, const char* filename), {
-    const p = UTF8ToString(path);
-    const name = UTF8ToString(filename);
-
-    // Read from Emscripten FS (make sure you compiled with -sFORCE_FILESYSTEM=1)
-    const data = FS.readFile(p); // Uint8Array
-
-    const blob = new Blob([data], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name || p.split('/').pop(); // fallback to path basename
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);
+EM_JS(void, _download_file, (const char* filepath), {
+    const _path = UTF8ToString(filepath);
+    const _data = FS.readFile(_path);
+    const _blob = new Blob([_data], { type: 'application/octet-stream' });
+    const _url = URL.createObjectURL(_blob);
+    const _element = document.createElement('a');
+    _element.href = _url;
+    _element.download = _path.split('/').pop();
+    document.body.appendChild(_element);
+    _element.click();
+    document.body.removeChild(_element);
+    URL.revokeObjectURL(_url);
 });
 #endif
 
-#if defined(_WIN32)
-static std::string _build_nfd_filter_string(const std::vector<std::pair<std::string, std::string>>& filters)
+[[nodiscard]] static std::string _build_filters(const std::vector<std::pair<std::string, std::string>>& filters)
 {
-    // We ignore the human-readable name (first) and only use pattern (second).
-    // Pattern is expected like "*.png;*.jpg" etc.
-    std::string out;
-    bool first = true;
+    std::string _filters;
 
-    for (const auto& f : filters) {
-        const std::string& pattern = f.second;
-        std::size_t start = 0;
+#if defined(__EMSCRIPTEN__)
+    for (const std::pair<const std::string, std::string>& _filter : filters) {
+        if (!_filters.empty()) {
+            _filters += ",";
+        }
+        std::string _pattern = _filter.second;
+        if (_pattern.rfind("*.", 0) == 0) {
+            _pattern = _pattern.substr(1);
+        } else if (!_pattern.empty() && _pattern[0] != '.') {
+            _pattern = "." + _pattern;
+        }
+        _filters += _pattern;
+    }
+#endif
 
-        while (start < pattern.size()) {
-            std::size_t end = pattern.find(';', start);
-            if (end == std::string::npos)
-                end = pattern.size();
-
-            std::string token = pattern.substr(start, end - start);
-
-            // trim spaces
-            auto trim_front = token.find_first_not_of(" \t");
-            if (trim_front != std::string::npos)
-                token.erase(0, trim_front);
-            auto trim_back = token.find_last_not_of(" \t");
-            if (trim_back != std::string::npos)
-                token.erase(trim_back + 1);
-
-            // remove "*." or "." prefix
-            if (token.rfind("*.", 0) == 0)
-                token.erase(0, 2);
-            else if (!token.empty() && token[0] == '.')
-                token.erase(0, 1);
-
-            if (!token.empty()) {
-                if (!first)
-                    out += ",";
-                out += token;
-                first = false;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    bool _is_first = true;
+    for (const std::pair<const std::string, std::string>& _filter : filters) {
+        const std::string& _pattern = _filter.second;
+        std::size_t _start = 0;
+        while (_start < _pattern.size()) {
+            std::size_t _end = _pattern.find(';', _start);
+            if (_end == std::string::npos) {
+                _end = _pattern.size();
             }
-
-            start = end + 1;
+            std::string _token = _pattern.substr(_start, _end - _start);
+            const std::size_t _trim_front = _token.find_first_not_of(" \t");
+            if (_trim_front != std::string::npos) {
+                _token.erase(0, _trim_front);
+            }
+            const std::size_t trim_back = _token.find_last_not_of(" \t");
+            if (trim_back != std::string::npos) {
+                _token.erase(trim_back + 1);
+            }
+            if (_token.rfind("*.", 0) == 0) {
+                _token.erase(0, 2);
+            } else if (!_token.empty() && _token[0] == '.') {
+                _token.erase(0, 1);
+            }
+            if (!_token.empty()) {
+                if (!_is_first) {
+                    _filters += ",";
+                }
+                _filters += _token;
+                _is_first = false;
+            }
+            _start = _end + 1;
         }
     }
-
-    return out;
-}
 #endif
+    return _filters;
+}
 
 }
 
@@ -91,25 +148,32 @@ bool import_file(
     const std::filesystem::path& default_path,
     const std::vector<std::pair<std::string, std::string>>& filters)
 {
-#if defined(_WIN32)
-    std::string filterList = _build_nfd_filter_string(filters);
-    const nfdchar_t* filter_cstr = filterList.empty() ? nullptr : filterList.c_str();
+    std::string _filters = _build_filters(filters);
 
-    nfdchar_t* out_path = nullptr;
-
-    nfdresult_t result = NFD_OpenDialog(
-        filter_cstr,
-        default_path.empty() ? nullptr : default_path.string().c_str(),
-        &out_path);
-
-    if (result == NFD_OKAY) {
-        file_path = std::filesystem::path(out_path);
-        free(out_path); // or NFD_FreePath if your NFD version provides it
-        return true;
+#if defined(__EMSCRIPTEN__)
+    char* _path_cstr = _upload_file(_filters.c_str());
+    if (!_path_cstr) {
+        return false;
     }
-    // NFD_CANCEL or NFD_ERROR → false
+    file_path = std::filesystem::path(_path_cstr);
+    free(_path_cstr);
+    return true;
 #endif
-    return false;
+
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
+    nfdchar_t* _path_cstr = nullptr;
+    if (NFD_OpenDialog(
+            _filters_cstr,
+            default_path.empty() ? nullptr : default_path.string().c_str(),
+            &_path_cstr)
+        != NFD_OKAY) {
+        return false;
+    }
+    file_path = std::filesystem::path(_path_cstr);
+    free(_path_cstr);
+    return true;
+#endif
 }
 
 bool export_file(
@@ -118,33 +182,26 @@ bool export_file(
     const std::vector<std::pair<std::string, std::string>>& filters)
 {
 #if defined(__EMSCRIPTEN__)
-    std::string fs_path = file_path.string();
-    std::string fname;
-    if (!default_path.empty()) {
-        fname = default_path.filename().string();
-    } else {
-        fname = file_path.filename().string();
+    if (default_path.empty()) {
+        return false;
     }
-    _download_file(fs_path.c_str(), fname.c_str());
+    file_path = default_path.filename();
     return true;
 #endif
 
-#if defined(_WIN32)
-    std::string filterList = _build_nfd_filter_string(filters);
-    const nfdchar_t* filter_cstr = filterList.empty() ? nullptr : filterList.c_str();
-
-    nfdchar_t* out_path = nullptr;
-
-    nfdresult_t result = NFD_SaveDialog(
-        filter_cstr,
-        default_path.empty() ? nullptr : default_path.string().c_str(),
-        &out_path);
-
-    if (result == NFD_OKAY) {
-        file_path = std::filesystem::path(out_path);
-        free(out_path); // or NFD_FreePath
-        return true;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    std::string _filters = _build_filters(filters);
+    const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
+    nfdchar_t* _path_cstr = nullptr;
+    if (NFD_SaveDialog(
+            _filters_cstr,
+            default_path.empty() ? nullptr : default_path.string().c_str(),
+            &_path_cstr)
+        != NFD_OKAY) {
+        return false;
     }
-    return false;
+    file_path = std::filesystem::path(_path_cstr);
+    free(_path_cstr);
+    return true;
 #endif
 }
