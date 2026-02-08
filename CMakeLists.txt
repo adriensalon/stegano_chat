@@ -69,7 +69,8 @@ if(ANDROID)
 	set(imgui_sources
 		${imgui_sources}
 		"external/imgui/backends/imgui_impl_android.cpp")
-elseif(WIN32)
+endif()
+if(NOT ANDROID AND NOT EMSCRIPTEN)
 	set(imgui_sources
 		${imgui_sources}
 		"external/imgui/backends/imgui_impl_glfw.cpp")
@@ -104,7 +105,7 @@ if(MSVC)
     target_compile_options(libsodium PRIVATE /wd4197)
     target_compile_options(libsodium PRIVATE /wd4244)
 endif()
-if(EMSCRIPTEN)
+if(ANDROID OR EMSCRIPTEN)
     target_compile_options(libsodium PRIVATE -Wno-cpp)
 endif()
 
@@ -140,7 +141,7 @@ set(zlib_sources
     "external/zlib/trees.c"
     "external/zlib/uncompr.c"
     "external/zlib/zutil.c")
-if(NOT EMSCRIPTEN)
+if(NOT ANDROID AND NOT EMSCRIPTEN)
     list(APPEND zlib_sources
         "external/zlib/gzclose.c"
         "external/zlib/gzlib.c"
@@ -204,7 +205,11 @@ endif()
 # -----------------------------------------------------------------------
 
 file(GLOB_RECURSE stegano_chat_sources "source/*.cpp")
-add_executable(stegano_chat ${stegano_chat_sources})
+if(ANDROID)
+    add_library(stegano_chat SHARED ${stegano_chat_sources})
+else()
+    add_executable(stegano_chat ${stegano_chat_sources})
+endif()
 set_target_properties(stegano_chat PROPERTIES CXX_STANDARD 17)
 target_link_libraries(stegano_chat PRIVATE cereal imgui libsodium zlib libpng)
 if(NOT EMSCRIPTEN AND NOT ANDROID)
@@ -278,3 +283,64 @@ else()
         VERBATIM
         USES_TERMINAL)
 endif()
+
+# android
+set(ndk_candidates)
+if(DEFINED ENV{ANDROID_NDK_ROOT})
+    list(APPEND ndk_candidates "$ENV{ANDROID_NDK_ROOT}")
+endif()
+if(DEFINED ENV{ANDROID_NDK_HOME})
+    list(APPEND ndk_candidates "$ENV{ANDROID_NDK_HOME}")
+endif()
+if(DEFINED ENV{ANDROID_NDK})
+    list(APPEND ndk_candidates "$ENV{ANDROID_NDK}")
+endif()
+if(DEFINED ENV{ANDROID_SDK_ROOT})
+    file(GLOB _ndk_dirs "$ENV{ANDROID_SDK_ROOT}/ndk/*")
+    list(APPEND ndk_candidates ${_ndk_dirs})
+endif()
+set(ANDROID_NDK_FOUND FALSE)
+foreach(cand IN LISTS ndk_candidates)
+    if(EXISTS "${cand}/build/cmake/android.toolchain.cmake")
+        set(ANDROID_NDK "${cand}")
+        set(ANDROID_NDK_FOUND TRUE)
+        break()
+    endif()
+endforeach()
+if(NOT ANDROID_NDK_FOUND)
+    find_program(ANDROID_NDK_BUILD_EXECUTABLE ndk-build)
+    if(ANDROID_NDK_BUILD_EXECUTABLE)
+        get_filename_component(_ndk_dir "${ANDROID_NDK_BUILD_EXECUTABLE}" DIRECTORY)
+        get_filename_component(_ndk_root "${_ndk_dir}/.." ABSOLUTE)
+        if(EXISTS "${_ndk_root}/build/cmake/android.toolchain.cmake")
+            set(ANDROID_NDK "${_ndk_root}")
+            set(ANDROID_NDK_FOUND TRUE)
+        endif()
+    endif()
+endif()
+if(NOT ANDROID_NDK_FOUND)
+    message(STATUS "Android NDK could not be located")
+else()
+    set(ANDROID_TOOLCHAIN "${ANDROID_NDK}/build/cmake/android.toolchain.cmake" CACHE PATH "Android NDK toolchain file")
+    message(STATUS "Found Android toolchain file at ${ANDROID_TOOLCHAIN}")
+    if(WIN32)
+        set(ANDROID_GRADLEW "gradlew.bat")
+    else()
+        set(ANDROID_GRADLEW "gradlew")
+    endif()
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/android")
+    add_custom_target(stegano_chat_android
+        ALL
+        COMMAND "${CMAKE_COMMAND}" -Wno-dev 
+            -S "${CMAKE_CURRENT_LIST_DIR}" 
+            -B "${CMAKE_CURRENT_BINARY_DIR}/android" 
+            -G "Ninja" 
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_TOOLCHAIN}
+            -DCMAKE_BUILD_TYPE=$<CONFIG>
+        COMMAND "${CMAKE_COMMAND}" 
+            --build "${CMAKE_CURRENT_BINARY_DIR}/android"
+            --target "stegano_chat"
+        VERBATIM
+        USES_TERMINAL)
+endif()
+

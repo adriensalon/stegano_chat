@@ -2,6 +2,13 @@
 #include <iostream>
 #include <stdexcept>
 
+#if defined(__ANDROID__)
+#include <EGL/egl.h>
+#include <GLES3/gl3.h>
+#include <android/log.h>
+// #include <android_native_app_glue.h>
+#endif
+
 #if defined(__EMSCRIPTEN__)
 #include <GLES3/gl3.h>
 #include <atomic>
@@ -352,7 +359,9 @@ static void _update_loop()
 #if defined(__EMSCRIPTEN__)
     emscripten_set_main_loop(_update, 0, EM_TRUE);
     emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
-#else
+#endif
+
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     while (!glfwWindowShouldClose(_glfw_window)) {
         _update();
     }

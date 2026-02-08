@@ -9,7 +9,7 @@
 #include <emscripten.h>
 #endif
 
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #include <nfd.h>
 #endif
 
@@ -89,7 +89,7 @@ EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
     }
 #endif
 
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     bool _is_first = true;
     for (const std::pair<const std::string, std::string>& _filter : filters) {
         const std::string& _pattern = _filter.second;
@@ -139,10 +139,9 @@ bool save_dialog(
         return false;
     }
     file_path = default_path.filename();
-    return true;
 #endif
 
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     std::string _filters = _build_filters(filters);
     const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
     nfdchar_t* _path_cstr = nullptr;
@@ -155,8 +154,9 @@ bool save_dialog(
     }
     file_path = std::filesystem::path(_path_cstr);
     free(_path_cstr);
-    return true;
 #endif
+
+    return true;
 }
 
 bool load_dialog(
@@ -173,10 +173,9 @@ bool load_dialog(
     }
     file_path = std::filesystem::path(_path_cstr);
     free(_path_cstr);
-    return true;
 #endif
 
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
     nfdchar_t* _path_cstr = nullptr;
     if (NFD_OpenDialog(
@@ -188,6 +187,7 @@ bool load_dialog(
     }
     file_path = std::filesystem::path(_path_cstr);
     free(_path_cstr);
-    return true;
 #endif
+
+    return true;
 }
