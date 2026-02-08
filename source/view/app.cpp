@@ -8,11 +8,11 @@
 #include <imgui.h>
 #include <misc/cpp/imgui_stdlib.h>
 
+#include <core/dialog.hpp>
 #include <core/transport.hpp>
 #include <core/user.hpp>
 #include <view/chat.hpp>
 #include <view/contacts.hpp>
-#include <view/dialog.hpp>
 #include <view/diagram.hpp>
 #include <view/icon.hpp>
 #include <view/login.hpp>

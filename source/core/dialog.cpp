@@ -91,6 +91,7 @@ bool import_file(
     const std::filesystem::path& default_path,
     const std::vector<std::pair<std::string, std::string>>& filters)
 {
+#if defined(_WIN32)
     std::string filterList = _build_nfd_filter_string(filters);
     const nfdchar_t* filter_cstr = filterList.empty() ? nullptr : filterList.c_str();
 
@@ -107,6 +108,7 @@ bool import_file(
         return true;
     }
     // NFD_CANCEL or NFD_ERROR → false
+#endif
     return false;
 }
 

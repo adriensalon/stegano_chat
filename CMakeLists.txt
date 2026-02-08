@@ -6,52 +6,54 @@ add_library(cereal INTERFACE EXCLUDE_FROM_ALL)
 target_include_directories(cereal INTERFACE "external/cereal/include")
 
 # glfw
-set(glfw_main_sources
-    "external/glfw/src/context.c"
-    "external/glfw/src/init.c"
-    "external/glfw/src/input.c"
-    "external/glfw/src/monitor.c"
-    "external/glfw/src/platform.c"
-    "external/glfw/src/vulkan.c"
-    "external/glfw/src/window.c"
-    "external/glfw/src/egl_context.c"
-    "external/glfw/src/osmesa_context.c"
-    "external/glfw/src/null_init.c"
-    "external/glfw/src/null_monitor.c"
-    "external/glfw/src/null_window.c"
-    "external/glfw/src/null_joystick.c")
-if(APPLE)
-    set(glfw_platform_sources
-        "external/glfw/src/cocoa_time.c"
-        "external/glfw/src/posix_module.c"
-        "external/glfw/src/posix_thread.c")
-elseif(WIN32)
-    set(glfw_platform_sources
-        "external/glfw/src/win32_time.c"
-        "external/glfw/src/win32_module.c"
-        "external/glfw/src/win32_thread.c"
-        "external/glfw/src/win32_init.c"
-        "external/glfw/src/win32_joystick.c"
-        "external/glfw/src/win32_monitor.c"
-        "external/glfw/src/win32_window.c"
-        "external/glfw/src/wgl_context.c")    
-else()
-    set(glfw_platform_sources 
-        "external/glfw/src/posix_module.c"
-        "external/glfw/src/posix_time.c"
-        "external/glfw/src/posix_thread.c")
-endif()
-set(glfw_sources ${glfw_main_sources} ${glfw_platform_sources})
-add_library(glfw STATIC EXCLUDE_FROM_ALL ${glfw_sources})
-set_target_properties(glfw PROPERTIES CXX_STANDARD 17)
-target_include_directories(glfw PUBLIC "external/glfw/include")
-target_include_directories(glfw PUBLIC "external/glfw/deps")
-if(WIN32)
-    target_compile_definitions(glfw PRIVATE _GLFW_WIN32)
-endif()
-if(MSVC)
-    target_compile_options(glfw PRIVATE /wd4034)
-    target_compile_options(glfw PRIVATE /wd4996)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    set(glfw_main_sources
+        "external/glfw/src/context.c"
+        "external/glfw/src/init.c"
+        "external/glfw/src/input.c"
+        "external/glfw/src/monitor.c"
+        "external/glfw/src/platform.c"
+        "external/glfw/src/vulkan.c"
+        "external/glfw/src/window.c"
+        "external/glfw/src/egl_context.c"
+        "external/glfw/src/osmesa_context.c"
+        "external/glfw/src/null_init.c"
+        "external/glfw/src/null_monitor.c"
+        "external/glfw/src/null_window.c"
+        "external/glfw/src/null_joystick.c")
+    if(APPLE)
+        set(glfw_platform_sources
+            "external/glfw/src/cocoa_time.c"
+            "external/glfw/src/posix_module.c"
+            "external/glfw/src/posix_thread.c")
+    elseif(WIN32)
+        set(glfw_platform_sources
+            "external/glfw/src/win32_time.c"
+            "external/glfw/src/win32_module.c"
+            "external/glfw/src/win32_thread.c"
+            "external/glfw/src/win32_init.c"
+            "external/glfw/src/win32_joystick.c"
+            "external/glfw/src/win32_monitor.c"
+            "external/glfw/src/win32_window.c"
+            "external/glfw/src/wgl_context.c")    
+    else()
+        set(glfw_platform_sources 
+            "external/glfw/src/posix_module.c"
+            "external/glfw/src/posix_time.c"
+            "external/glfw/src/posix_thread.c")
+    endif()
+    set(glfw_sources ${glfw_main_sources} ${glfw_platform_sources})
+    add_library(glfw STATIC EXCLUDE_FROM_ALL ${glfw_sources})
+    set_target_properties(glfw PROPERTIES CXX_STANDARD 17)
+    target_include_directories(glfw PUBLIC "external/glfw/include")
+    target_include_directories(glfw PUBLIC "external/glfw/deps")
+    if(WIN32)
+        target_compile_definitions(glfw PRIVATE _GLFW_WIN32)
+    endif()
+    if(MSVC)
+        target_compile_options(glfw PRIVATE /wd4034)
+        target_compile_options(glfw PRIVATE /wd4996)
+    endif()
 endif()
 
 # imgui
@@ -102,47 +104,35 @@ if(MSVC)
     target_compile_options(libsodium PRIVATE /wd4197)
     target_compile_options(libsodium PRIVATE /wd4244)
 endif()
+if(EMSCRIPTEN)
+    target_compile_options(libsodium PRIVATE -Wno-cpp)
+endif()
 
 # nativefiledialog
-set(nativefiledialog_source "external/nativefiledialog/src/nfd_common.c")
-if(WIN32)
-    set(nativefiledialog_source ${nativefiledialog_source} "external/nativefiledialog/src/nfd_win.cpp")
-elseif(LINUX)
-endif()
-add_library(nativefiledialog STATIC EXCLUDE_FROM_ALL ${nativefiledialog_source})
-set_target_properties(nativefiledialog PROPERTIES C_STANDARD 99)
-set_target_properties(nativefiledialog PROPERTIES CXX_STANDARD 17)
-target_include_directories(nativefiledialog PUBLIC "external/nativefiledialog/src/include")
-if(MSVC)
-    target_compile_definitions(nativefiledialog PRIVATE _CRT_SECURE_NO_WARNINGS)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    set(nativefiledialog_source "external/nativefiledialog/src/nfd_common.c")
+    if(WIN32)
+        set(nativefiledialog_source ${nativefiledialog_source} "external/nativefiledialog/src/nfd_win.cpp")
+    elseif(LINUX)
+    endif()
+    add_library(nativefiledialog STATIC EXCLUDE_FROM_ALL ${nativefiledialog_source})
+    set_target_properties(nativefiledialog PROPERTIES C_STANDARD 99)
+    set_target_properties(nativefiledialog PROPERTIES CXX_STANDARD 17)
+    target_include_directories(nativefiledialog PUBLIC "external/nativefiledialog/src/include")
+    if(MSVC)
+        target_compile_definitions(nativefiledialog PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
 endif()
 
 # zlib
 configure_file(	
     "external/zlib/zconf.h.cmakein"
     "${CMAKE_CURRENT_BINARY_DIR}/external/zlib/zconf.h" @ONLY)
-set(zlib_public_headers
-    "${CMAKE_CURRENT_BINARY_DIR}/external/zlib/zconf.h"
-    "external/zlib/zlib.h")
-set(zlib_private_headers
-    "external/zlib/crc32.h"
-    "external/zlib/deflate.h"
-    "external/zlib/gzguts.h"
-    "external/zlib/inffast.h"
-    "external/zlib/inffixed.h"
-    "external/zlib/inflate.h"
-    "external/zlib/inftrees.h"
-    "external/zlib/trees.h"
-    "external/zlib/zutil.h")
 set(zlib_sources
     "external/zlib/adler32.c"
     "external/zlib/compress.c"
     "external/zlib/crc32.c"
     "external/zlib/deflate.c"
-    "external/zlib/gzclose.c"
-    "external/zlib/gzlib.c"
-    "external/zlib/gzread.c"
-    "external/zlib/gzwrite.c"
     "external/zlib/inflate.c"
     "external/zlib/infback.c"
     "external/zlib/inftrees.c"
@@ -150,7 +140,14 @@ set(zlib_sources
     "external/zlib/trees.c"
     "external/zlib/uncompr.c"
     "external/zlib/zutil.c")
-add_library(zlib STATIC EXCLUDE_FROM_ALL ${zlib_sources} ${zlib_public_headers} ${zlib_private_headers})
+if(NOT EMSCRIPTEN)
+    list(APPEND zlib_sources
+        "external/zlib/gzclose.c"
+        "external/zlib/gzlib.c"
+        "external/zlib/gzread.c"
+        "external/zlib/gzwrite.c")
+endif()
+add_library(zlib STATIC EXCLUDE_FROM_ALL ${zlib_sources})
 target_include_directories(zlib PUBLIC "external/zlib" "${CMAKE_CURRENT_BINARY_DIR}/external/zlib")
 if(MSVC)
     target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -209,8 +206,73 @@ endif()
 file(GLOB_RECURSE stegano_chat_sources "source/*.cpp")
 add_executable(stegano_chat ${stegano_chat_sources})
 set_target_properties(stegano_chat PROPERTIES CXX_STANDARD 17)
-target_link_libraries(stegano_chat PRIVATE cereal glfw imgui libsodium nativefiledialog zlib libpng)
+target_link_libraries(stegano_chat PRIVATE cereal imgui libsodium zlib libpng)
+if(NOT EMSCRIPTEN AND NOT ANDROID)
+    target_link_libraries(stegano_chat PRIVATE glfw nativefiledialog)
+endif()
 target_include_directories(stegano_chat PRIVATE "source")
 if(MSVC)
     target_compile_definitions(stegano_chat PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+if(EMSCRIPTEN)
+    set_target_properties(stegano_chat PROPERTIES 
+        SUFFIX ".html")
+    target_link_options(stegano_chat PRIVATE 
+        --shell-file "${CMAKE_CURRENT_LIST_DIR}/platform/web/shell.html"
+        -sLLD_REPORT_UNDEFINED
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=671088640
+        -sMALLOC=emmalloc
+        -sMAX_WEBGL_VERSION=2
+        -sUSE_WEBGL2=1)
+    add_custom_command(TARGET stegano_chat POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rename
+            $<TARGET_FILE:stegano_chat>
+            $<TARGET_FILE_DIR:stegano_chat>/index.html)
+endif()
+
+# -----------------------------------------------------------------------
+
+if(CMAKE_CROSSCOMPILING)
+    return()
+endif()
+
+# web
+if(DEFINED ENV{EMSDK})
+    set(emsdk_dir $ENV{EMSDK})
+elseif(DEFINED ENV{EMSCRIPTEN})
+    set(emsdk_dir $ENV{EMSCRIPTEN})
+endif()
+if(emsdk_dir AND EXISTS "${emsdk_dir}")
+    message(STATUS "Found Emsdk at ${emsdk_dir}")
+    set(emsdk_found TRUE)
+else()
+    find_program(emcc_executable NAMES emcc PATHS ENV PATH)
+    if(emcc_executable)
+        get_filename_component(emcc_dir "${emcc_executable}" DIRECTORY)
+        get_filename_component(emsdk_dir "${emcc_dir}/../../" ABSOLUTE)
+        if(EXISTS "${emsdk_dir}")
+            set(emsdk_found TRUE)
+        endif()
+    endif()
+endif()
+if(NOT emsdk_found)
+    message(STATUS "Emscripten SDK could not be located")
+else()
+    set(emsdk_toolchain_file "${emsdk_dir}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" CACHE PATH "emsdk_dir toolchain file")
+    message(STATUS "Found Emscripten toolchain file at ${emsdk_toolchain_file}")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/web")
+    add_custom_target(stegano_chat_web
+        ALL
+        COMMAND "${CMAKE_COMMAND}" -Wno-dev 
+            -S "${CMAKE_CURRENT_LIST_DIR}" 
+            -B "${CMAKE_CURRENT_BINARY_DIR}/web" 
+            -G "Ninja" 
+            -DCMAKE_TOOLCHAIN_FILE=${emsdk_toolchain_file}
+            -DCMAKE_BUILD_TYPE=$<CONFIG>
+        COMMAND "${CMAKE_COMMAND}" 
+            --build "${CMAKE_CURRENT_BINARY_DIR}/web"
+            --target "stegano_chat"
+        VERBATIM
+        USES_TERMINAL)
 endif()
