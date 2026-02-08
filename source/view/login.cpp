@@ -78,14 +78,11 @@ void draw_login()
         ImGui::SetCursorPosX(0.5f * (_display_size.x - _login_width));
         if (ImGui::Button("login to local userprofile", ImVec2(_login_width, 0))) {
             const std::filesystem::path _userprofile_path = _memory_username + ".userprofile";
-            if (std::filesystem::exists(_userprofile_path)) {
-                std::ifstream _fstream(_userprofile_path, std::ios::binary);
-                chat_user _user;
-                if (load_user(_fstream, _user, _memory_userpass)) {
-                    _memory_user = _user;
-                } else {
-                    _is_notify_login_failed = true;
-                }
+            // const std::filesystem::path _userprofile_path = "data/" + _memory_username + ".userprofile";
+            chat_user _user;
+            if (std::filesystem::exists(_userprofile_path)
+                && load_user(_userprofile_path, _user, _memory_userpass)) {
+                _memory_user = _user;
             } else {
                 _is_notify_login_failed = true;
             }
@@ -94,27 +91,11 @@ void draw_login()
         ImGui::SetCursorPosX(0.5f * (_display_size.x - _login_width));
         if (ImGui::Button("create local userprofile", ImVec2(_login_width, 0))) {
             const std::filesystem::path _userprofile_path = _memory_username + ".userprofile";
+            // const std::filesystem::path _userprofile_path = "data/" + _memory_username + ".userprofile";
             if (!std::filesystem::exists(_userprofile_path)) {
-                std::ofstream _fstream(_userprofile_path, std::ios::binary);
                 _memory_user = chat_user();
-
-                // DEMO
-                // stchat_contact& _lol = _memory_user->contacts.emplace_back();
-                // _lol.display = "myfriend";
-                // _lol.messages.push_back({ stchat_message_direction::received, "Vous avez été énorme . C’était pas une interview de plateau télé mais un tribunal de police. Bravo !" });
-                // _lol.messages.push_back({ stchat_message_direction::received, "Quel courage! J'ai 50 ans et je n'ai jamais vu un responsable politique attaqué aussi fort. Ces gens ont une trouille tellement enorme et c'est de bonne augure. Merci Mme Guetté, vous etes seule sur ces plateaux... tres seule mais nous sommes tres tres nombreux derriere vous n'en doutez pas." });
-                // _lol.messages.push_back({ stchat_message_direction::sent, "Wauquiez c est le manuel valls de la droite😂" });
-                // _lol.messages.push_back({ stchat_message_direction::received, "Vous avez été énorme . C’était pas une interview de plateau télé mais un tribunal de police. Bravo !" });
-                // _lol.messages.push_back({ stchat_message_direction::received, "Quel courage! J'ai 50 ans et je n'ai jamais vu un responsable politique attaqué aussi fort. Ces gens ont une trouille tellement enorme et c'est de bonne augure. Merci Mme Guetté, vous etes seule sur ces plateaux... tres seule mais nous sommes tres tres nombreux derriere vous n'en doutez pas." });
-                // stchat_contact& _lol2 = _memory_user->contacts.emplace_back();
-                // _lol2.display = "myfriend2";
-                // _lol2.messages.push_back({ stchat_message_direction::received, "Vous avez été énorme . C’était pas une interview de plateau télé mais un tribunal de police. Bravo !" });
-                // _lol2.messages.push_back({ stchat_message_direction::received, "Quel courage! J'ai 50 ans et je n'ai jamais vu un responsable politique attaqué aussi fort. Ces gens ont une trouille tellement enorme et c'est de bonne augure. Merci Mme Guetté, vous etes seule sur ces plateaux... tres seule mais nous sommes tres tres nombreux derriere vous n'en doutez pas." });
-                // _lol2.messages.push_back({ stchat_message_direction::sent, "Wauquiez c est le manuel valls de la droite😂" });
-                // _lol2.messages.push_back({ stchat_message_direction::received, "Vous avez été énorme . C’était pas une interview de plateau télé mais un tribunal de police. Bravo !" });
-
                 create_keys(_memory_user->public_key, _memory_user->private_key);
-                save_user(_fstream, _memory_user.value(), _memory_userpass);
+                save_user(_userprofile_path, _memory_user.value(), _memory_userpass, false);
             } else {
                 _is_notify_login_failed = true;
             }
@@ -123,14 +104,14 @@ void draw_login()
         ImGui::SetCursorPosX(0.5f * (_display_size.x - _login_width));
         if (ImGui::Button("import userprofile from file", ImVec2(_login_width, 0))) {
             // open load file dialog
-            std::istringstream _sstream("");
-            chat_user _user;
-            if (load_user(_sstream, _user, _memory_userpass)) {
-                _memory_user = _user;
-                // save
-            } else {
-                _is_notify_login_failed = true;
-            }
+            // std::istringstream _sstream("");
+            // chat_user _user;
+            // if (load_user(_sstream, _user, _memory_userpass)) {
+            //     _memory_user = _user;
+            //     // save
+            // } else {
+            //     _is_notify_login_failed = true;
+            // }
         }
 
         if (_memory_user && !_memory_user->contacts.empty()) {

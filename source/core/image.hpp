@@ -13,10 +13,10 @@ struct chat_image {
     std::unordered_map<std::string, std::string> metadata;
 };
 
-void load_image(
-    const std::filesystem::path& path, 
-    chat_image& image);
-
 void save_image(
-    const std::filesystem::path& path, 
+    const std::filesystem::path& image_path, 
     const chat_image& image);
+
+void load_image(
+    const std::filesystem::path& image_path, 
+    chat_image& image);

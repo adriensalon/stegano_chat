@@ -1,16 +1,92 @@
 #include <cstdio>
 #include <filesystem>
+#include <iostream>
 #include <stdexcept>
 #include <vector>
-#include <iostream>
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
 
 #include <png.h>
 
 #include <core/image.hpp>
 
-void load_image(const std::filesystem::path& path, chat_image& image)
+namespace {
+
+#if defined(__EMSCRIPTEN__)
+void _download_file(const char* path)
 {
-    FILE* _file_ptr = fopen(path.string().c_str(), "rb");
+    EM_ASM({
+        const _path = UTF8ToString($0);
+        const _data = FS.readFile(_path);
+        const _blob = new Blob([_data], { type: 'application/octet-stream' });
+        const _url = URL.createObjectURL(_blob);
+        const _element = document.createElement('a');
+        _element.href = _url;
+        _element.download = _path.split('/').pop();
+        document.body.appendChild(_element);
+        _element.click();
+        document.body.removeChild(_element);
+        URL.revokeObjectURL(_url); }, path);
+}
+#endif
+
+}
+
+void save_image(const std::filesystem::path& image_path, const chat_image& image)
+{
+    FILE* _file_ptr = fopen(image_path.string().c_str(), "wb");
+    if (!_file_ptr) {
+        throw std::runtime_error("failed to open output file");
+    }
+    png_structp _png_write = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    if (!_png_write) {
+        throw std::runtime_error("png_create_write_struct failed");
+    }
+    png_infop _png_info = png_create_info_struct(_png_write);
+    if (!_png_info) {
+        throw std::runtime_error("png_create_info_struct failed");
+    }
+    if (setjmp(png_jmpbuf(_png_write))) {
+        throw std::runtime_error("libpng write error");
+    }
+    png_init_io(_png_write, _file_ptr);
+    png_set_IHDR(_png_write, _png_info, static_cast<png_uint_32>(image.width), static_cast<png_uint_32>(image.height), 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    // METADATA WIP
+    std::vector<png_text> _png_texts;
+    for (const std::pair<const std::string, std::string>& _metadata_pair : image.metadata) {
+        png_text _png_text;
+        _png_text.compression = PNG_TEXT_COMPRESSION_NONE;
+        _png_text.key = const_cast<char*>(_metadata_pair.first.c_str());
+        _png_text.text = const_cast<char*>(_metadata_pair.second.c_str());
+        _png_text.text_length = static_cast<int>(_metadata_pair.second.size());
+        _png_texts.push_back(_png_text);
+    }
+    if (!_png_texts.empty()) {
+        png_set_text(_png_write, _png_info, _png_texts.data(), static_cast<int>(_png_texts.size()));
+    }
+    // METADATA WIP
+
+    png_write_info(_png_write, _png_info);
+    std::vector<png_bytep> _rows(image.height);
+    for (int _row_index = 0; _row_index < image.height; ++_row_index) {
+        _rows[_row_index] = (png_bytep)(image.rgb.data() + _row_index * image.width * 3);
+    }
+    png_write_image(_png_write, _rows.data());
+    png_write_end(_png_write, nullptr);
+    fclose(_file_ptr);
+    png_destroy_write_struct(&_png_write, &_png_info);
+
+#if defined(__EMSCRIPTEN__)
+    _download_file(image_path.string().c_str());
+#endif
+}
+
+void load_image(const std::filesystem::path& image_path, chat_image& image)
+{
+    FILE* _file_ptr = fopen(image_path.string().c_str(), "rb");
     if (!_file_ptr) {
         throw std::runtime_error("Failed to open image");
     }
@@ -71,50 +147,4 @@ void load_image(const std::filesystem::path& path, chat_image& image)
 
     fclose(_file_ptr);
     png_destroy_read_struct(&_png_read, &_png_info, nullptr);
-}
-
-void save_image(const std::filesystem::path& path, const chat_image& image)
-{
-    FILE* _file_ptr = fopen(path.string().c_str(), "wb");
-    if (!_file_ptr) {
-        throw std::runtime_error("failed to open output file");
-    }
-    png_structp _png_write = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-    if (!_png_write) {
-        throw std::runtime_error("png_create_write_struct failed");
-    }
-    png_infop _png_info = png_create_info_struct(_png_write);
-    if (!_png_info) {
-        throw std::runtime_error("png_create_info_struct failed");
-    }
-    if (setjmp(png_jmpbuf(_png_write))) {
-        throw std::runtime_error("libpng write error");
-    }
-    png_init_io(_png_write, _file_ptr);
-    png_set_IHDR(_png_write, _png_info, static_cast<png_uint_32>(image.width), static_cast<png_uint_32>(image.height), 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-    
-    // METADATA WIP
-    std::vector<png_text> _png_texts;
-    for (const std::pair<const std::string, std::string>& _metadata_pair : image.metadata) {
-        png_text _png_text;
-        _png_text.compression = PNG_TEXT_COMPRESSION_NONE;
-        _png_text.key = const_cast<char*>(_metadata_pair.first.c_str());
-        _png_text.text = const_cast<char*>(_metadata_pair.second.c_str());
-        _png_text.text_length = static_cast<int>(_metadata_pair.second.size());
-        _png_texts.push_back(_png_text);
-    }
-    if (!_png_texts.empty()) {
-        png_set_text(_png_write, _png_info, _png_texts.data(), static_cast<int>(_png_texts.size()));
-    }
-    // METADATA WIP
-    
-    png_write_info(_png_write, _png_info);
-    std::vector<png_bytep> _rows(image.height);
-    for (int _row_index = 0; _row_index < image.height; ++_row_index) {
-        _rows[_row_index] = (png_bytep)(image.rgb.data() + _row_index * image.width * 3);
-    }
-    png_write_image(_png_write, _rows.data());
-    png_write_end(_png_write, nullptr);
-    fclose(_file_ptr);
-    png_destroy_write_struct(&_png_write, &_png_info);
 }

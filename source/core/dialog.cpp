@@ -68,20 +68,6 @@ EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
     });
 });
 // clang-format on
-
-EM_JS(void, _download_file, (const char* filepath), {
-    const _path = UTF8ToString(filepath);
-    const _data = FS.readFile(_path);
-    const _blob = new Blob([_data], { type: 'application/octet-stream' });
-    const _url = URL.createObjectURL(_blob);
-    const _element = document.createElement('a');
-    _element.href = _url;
-    _element.download = _path.split('/').pop();
-    document.body.appendChild(_element);
-    _element.click();
-    document.body.removeChild(_element);
-    URL.revokeObjectURL(_url);
-});
 #endif
 
 [[nodiscard]] static std::string _build_filters(const std::vector<std::pair<std::string, std::string>>& filters)
@@ -143,7 +129,37 @@ EM_JS(void, _download_file, (const char* filepath), {
 
 }
 
-bool import_file(
+bool save_dialog(
+    std::filesystem::path& file_path,
+    const std::filesystem::path& default_path,
+    const std::vector<std::pair<std::string, std::string>>& filters)
+{
+#if defined(__EMSCRIPTEN__)
+    if (default_path.empty()) {
+        return false;
+    }
+    file_path = default_path.filename();
+    return true;
+#endif
+
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    std::string _filters = _build_filters(filters);
+    const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
+    nfdchar_t* _path_cstr = nullptr;
+    if (NFD_SaveDialog(
+            _filters_cstr,
+            default_path.empty() ? nullptr : default_path.string().c_str(),
+            &_path_cstr)
+        != NFD_OKAY) {
+        return false;
+    }
+    file_path = std::filesystem::path(_path_cstr);
+    free(_path_cstr);
+    return true;
+#endif
+}
+
+bool load_dialog(
     std::filesystem::path& file_path,
     const std::filesystem::path& default_path,
     const std::vector<std::pair<std::string, std::string>>& filters)
@@ -164,36 +180,6 @@ bool import_file(
     const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
     nfdchar_t* _path_cstr = nullptr;
     if (NFD_OpenDialog(
-            _filters_cstr,
-            default_path.empty() ? nullptr : default_path.string().c_str(),
-            &_path_cstr)
-        != NFD_OKAY) {
-        return false;
-    }
-    file_path = std::filesystem::path(_path_cstr);
-    free(_path_cstr);
-    return true;
-#endif
-}
-
-bool export_file(
-    std::filesystem::path& file_path,
-    const std::filesystem::path& default_path,
-    const std::vector<std::pair<std::string, std::string>>& filters)
-{
-#if defined(__EMSCRIPTEN__)
-    if (default_path.empty()) {
-        return false;
-    }
-    file_path = default_path.filename();
-    return true;
-#endif
-
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-    std::string _filters = _build_filters(filters);
-    const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
-    nfdchar_t* _path_cstr = nullptr;
-    if (NFD_SaveDialog(
             _filters_cstr,
             default_path.empty() ? nullptr : default_path.string().c_str(),
             &_path_cstr)

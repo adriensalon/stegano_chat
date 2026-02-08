@@ -1,8 +1,7 @@
 #pragma once
 
 #include <array>
-#include <istream>
-#include <ostream>
+#include <filesystem>
 #include <string>
 #include <vector>
 #include <list>
@@ -30,11 +29,12 @@ struct chat_user {
 };
 
 void save_user(
-    std::ostream& stream,
+    const std::filesystem::path& user_path,
     const chat_user& user,
-    const std::string& password);
+    const std::string& password,
+    const bool is_download = false);
 
 bool load_user(
-    std::istream& stream,
+    const std::filesystem::path& user_path,
     chat_user& user,
     const std::string& password);

@@ -1,11 +1,11 @@
 #pragma once
 
-bool import_file(
+bool save_dialog(
     std::filesystem::path& file_path,
     const std::filesystem::path& default_path = "",
     const std::vector<std::pair<std::string, std::string>>& filters = {});
 
-bool export_file(
+bool load_dialog(
     std::filesystem::path& file_path,
     const std::filesystem::path& default_path = "",
     const std::vector<std::pair<std::string, std::string>>& filters = {});

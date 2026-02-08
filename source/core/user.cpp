@@ -1,5 +1,10 @@
+#include <fstream>
 #include <sstream>
 #include <stdexcept>
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
 
 #include <cereal/archives/portable_binary.hpp>
 #include <cereal/cereal.hpp>
@@ -48,16 +53,35 @@ void _derive_key_from_password(
             crypto_pwhash_MEMLIMIT_INTERACTIVE,
             crypto_pwhash_ALG_DEFAULT)
         != 0) {
-        throw std::runtime_error("pwhash failed");
+        throw std::runtime_error("crypto_pwhash failed");
     }
 }
+
+#if defined(__EMSCRIPTEN__)
+void _download_file(const char* path)
+{
+    EM_ASM({
+        const _path = UTF8ToString($0);
+        const _data = FS.readFile(_path);
+        const _blob = new Blob([_data], { type: 'application/octet-stream' });
+        const _url = URL.createObjectURL(_blob);
+        const _element = document.createElement('a');
+        _element.href = _url;
+        _element.download = _path.split('/').pop();
+        document.body.appendChild(_element);
+        _element.click();
+        document.body.removeChild(_element);
+        URL.revokeObjectURL(_url); }, path);
+}
+#endif
 
 }
 
 void save_user(
-    std::ostream& stream,
+    const std::filesystem::path& user_path,
     const chat_user& user,
-    const std::string& password)
+    const std::string& password,
+    const bool is_download)
 {
     std::ostringstream _osstream(std::ios::binary);
     {
@@ -82,42 +106,49 @@ void save_user(
         != 0) {
         throw std::runtime_error("crypto_secretbox_easy failed");
     }
-
+    std::ofstream _fstream(user_path, std::ios::binary);
     const char _magic[4] = { 'S', 'U', 'S', 'R' };
-    stream.write(_magic, 4);
+    _fstream.write(_magic, 4);
     const std::uint32_t _version = 1;
-    stream.write(reinterpret_cast<const char*>(&_version), sizeof(_version));
-    stream.write(reinterpret_cast<const char*>(_salt.data()), _salt.size());
-    stream.write(reinterpret_cast<const char*>(_nonce.data()), _nonce.size());
+    _fstream.write(reinterpret_cast<const char*>(&_version), sizeof(_version));
+    _fstream.write(reinterpret_cast<const char*>(_salt.data()), _salt.size());
+    _fstream.write(reinterpret_cast<const char*>(_nonce.data()), _nonce.size());
     const std::uint32_t _ciphertext_count = static_cast<std::uint32_t>(_ciphertext.size());
-    stream.write(reinterpret_cast<const char*>(&_ciphertext_count), sizeof(_ciphertext_count));
-    stream.write(reinterpret_cast<const char*>(_ciphertext.data()), _ciphertext.size());
+    _fstream.write(reinterpret_cast<const char*>(&_ciphertext_count), sizeof(_ciphertext_count));
+    _fstream.write(reinterpret_cast<const char*>(_ciphertext.data()), _ciphertext.size());
+
+#if defined(__EMSCRIPTEN__)
+    if (is_download) {
+        _download_file(user_path.string().c_str());
+    }
+#endif
 }
 
 bool load_user(
-    std::istream& stream,
+    const std::filesystem::path& user_path,
     chat_user& user,
     const std::string& password)
 {
+    std::ifstream _fstream(user_path, std::ios::binary);
     char _magic[4];
-    stream.read(_magic, 4);
-    if (stream.gcount() != 4 || _magic[0] != 'S' || _magic[1] != 'U' || _magic[2] != 'S' || _magic[3] != 'R') {
+    _fstream.read(_magic, 4);
+    if (_fstream.gcount() != 4 || _magic[0] != 'S' || _magic[1] != 'U' || _magic[2] != 'S' || _magic[3] != 'R') {
         throw std::runtime_error("invalid user file magic");
     }
     std::uint32_t _version = 0;
-    stream.read(reinterpret_cast<char*>(&_version), sizeof(_version));
+    _fstream.read(reinterpret_cast<char*>(&_version), sizeof(_version));
     if (_version != 1) {
         throw std::runtime_error("unsupported user file version");
     }
 
     std::array<std::uint8_t, 16> _salt {};
-    stream.read(reinterpret_cast<char*>(_salt.data()), _salt.size());
+    _fstream.read(reinterpret_cast<char*>(_salt.data()), _salt.size());
     std::array<std::uint8_t, crypto_secretbox_NONCEBYTES> _nonce {};
-    stream.read(reinterpret_cast<char*>(_nonce.data()), _nonce.size());
+    _fstream.read(reinterpret_cast<char*>(_nonce.data()), _nonce.size());
     std::uint32_t _ciphertext_count = 0;
-    stream.read(reinterpret_cast<char*>(&_ciphertext_count), sizeof(_ciphertext_count));
+    _fstream.read(reinterpret_cast<char*>(&_ciphertext_count), sizeof(_ciphertext_count));
     std::vector<std::uint8_t> _ciphertext(_ciphertext_count);
-    stream.read(reinterpret_cast<char*>(_ciphertext.data()), _ciphertext_count);
+    _fstream.read(reinterpret_cast<char*>(_ciphertext.data()), _ciphertext_count);
 
     std::array<std::uint8_t, crypto_secretbox_KEYBYTES> _key {};
     _derive_key_from_password(password, _salt, _key);

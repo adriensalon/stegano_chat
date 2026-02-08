@@ -50,7 +50,7 @@ void _draw_user_settings()
             }
             if (ImGui::Button("export public key...", ImVec2(_available_width, 0))) {
                 std::filesystem::path _file_path;
-                if (export_file(_file_path, "", { { "Text", "*.txt" } })) {
+                if (save_dialog(_file_path, "", { { "Text", "*.txt" } })) {
                     std::ofstream _fstream(_file_path, std::ios::binary);
                     _fstream.write(reinterpret_cast<const char*>(_memory_user->public_key.data()), 32);
                 }
@@ -84,7 +84,7 @@ void _draw_add_contact()
             }
             if (ImGui::Button("import public key...", ImVec2(_available_width, 0))) {
                 std::filesystem::path _file_path;
-                if (import_file(_file_path, "", { { "Text", "*.txt" } })) {
+                if (load_dialog(_file_path, "", { { "Text", "*.txt" } })) {
                     std::ifstream _fstream(_file_path, std::ios::binary);
                     std::array<std::uint8_t, 32> _read_public_key;
                     _fstream.read(reinterpret_cast<char*>(_read_public_key.data()), 32);
@@ -193,10 +193,11 @@ void draw_app()
             // TODO
             chat_image _image, _result_image;
             load_image("input.png", _image);
+            
             const std::list<chat_contact>::iterator _iterator = std::next(_memory_user->contacts.begin(), _memory_contact_index.value());
             if (send_message(_image, _memory_user->public_key, _memory_user->private_key, _iterator->contact_public_key, _memory_chat_text, _result_image)) {
                 std::filesystem::path _file_path;
-                if (export_file(_file_path, "", { { "Image", "*.png" } })) {
+                if (save_dialog(_file_path, "", { { "Image", "*.png" } })) {
                     save_image(_file_path, _result_image);
                     _iterator->messages.emplace_back().direction = chat_message_direction::sent;
                     _iterator->messages.back().plaintext = _memory_chat_text;
@@ -209,7 +210,7 @@ void draw_app()
         if (ImGui::Button(_receive_button_id.c_str(), ImVec2(_button_width, 0))) {
             // TODO
             std::filesystem::path _file_path;
-            if (import_file(_file_path, "", { { "Image", "*.png" } })) {
+            if (load_dialog(_file_path, "", { { "Image", "*.png" } })) {
                 chat_image _image;
                 load_image(_file_path, _image);
                 const std::list<chat_contact>::iterator _iterator = std::next(_memory_user->contacts.begin(), _memory_contact_index.value());
