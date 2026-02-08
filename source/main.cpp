@@ -4,6 +4,7 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <GLES3/gl3.h>
+#include <atomic>
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #endif
@@ -164,6 +165,20 @@ EM_BOOL _mouse_callback(int event_type, const EmscriptenMouseEvent* event, void*
 //     return 0; // we use preventDefault() for touch callbacks (see Safari on iPad)
 // }
 
+static std::atomic<bool> _is_filesystem_ready = false;
+
+void _setup_filesystem()
+{
+    EM_ASM(
+        FS.mkdir('/data');
+        FS.mount(IDBFS, {}, '/data');
+        FS.syncfs(true, function(_err) {
+            if (_err) {
+                console.error('IDBFS sync failed:', _err);
+            }
+            setValue($0, 1, 'i8'); });, &_is_filesystem_ready);
+}
+
 #endif
 
 #if defined(_WIN32)
@@ -198,6 +213,57 @@ static void _glfw_mouse_button_callback(GLFWwindow* window, int button, int acti
 static std::int32_t _screen_width = 0;
 static std::int32_t _screen_height = 0;
 static bool _is_mobile = false;
+
+static void _setup_platform()
+{
+#if defined(__EMSCRIPTEN__)
+    _is_mobile = _navigator_get_touch_points() > 1;
+    if (_is_mobile) {
+        // emscripten_set_touchstart_callback("#canvas", 0, 1, _touch_callback);
+        // emscripten_set_touchend_callback("#canvas", 0, 1, _touch_callback);
+        // emscripten_set_touchmove_callback("#canvas", 0, 1, _touch_callback);
+        // emscripten_set_touchcancel_callback("#canvas", 0, 1, _touch_callback); // EMSCRIPTEN_EVENT_TARGET_WINDOW doesnt seem to work on safari
+    } else {
+        emscripten_set_click_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mousedown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mouseup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_dblclick_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mouseenter_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mouseleave_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mouseover_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_mouseout_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
+        emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _key_callback);
+        emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _key_callback);
+        emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _key_callback);
+    }
+    _setup_filesystem();
+#endif
+
+#if defined(_WIN32)
+    _is_mobile = false;
+    glfwSetErrorCallback(_glfw_error_callback);
+    if (!glfwInit()) {
+        std::cout << "Failed to create glfw context on this device" << std::endl;
+        std::terminate();
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    _glfw_window = glfwCreateWindow(1600, 900, "stchat", NULL, NULL);
+    if (!_glfw_window) {
+        std::cout << "Failed to create glfw window on this device" << std::endl;
+        std::terminate();
+    }
+    glfwSetKeyCallback(_glfw_window, _glfw_key_callback);
+    glfwSetCursorPosCallback(_glfw_window, _glfw_mouse_position_callback);
+    glfwSetMouseButtonCallback(_glfw_window, _glfw_mouse_button_callback);
+    glfwMakeContextCurrent(_glfw_window);
+    glfwSetWindowFocusCallback(_glfw_window, _glfw_window_focus_callback);
+    gladLoadGL(glfwGetProcAddress);
+    glfwSwapInterval(1);
+#endif
+}
 
 static void _setup_opengl()
 {
@@ -234,58 +300,14 @@ static void _setup_imgui()
     ImGui_ImplOpenGL3_Init("#version 300 es");
 }
 
-static void _setup_platform()
-{
-#if defined(__EMSCRIPTEN__)
-    _is_mobile = _navigator_get_touch_points() > 1;
-    if (_is_mobile) {
-        // emscripten_set_touchstart_callback("#canvas", 0, 1, _touch_callback);
-        // emscripten_set_touchend_callback("#canvas", 0, 1, _touch_callback);
-        // emscripten_set_touchmove_callback("#canvas", 0, 1, _touch_callback);
-        // emscripten_set_touchcancel_callback("#canvas", 0, 1, _touch_callback); // EMSCRIPTEN_EVENT_TARGET_WINDOW doesnt seem to work on safari
-    } else {
-        emscripten_set_click_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mousedown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mouseup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_dblclick_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mouseenter_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mouseleave_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mouseover_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_mouseout_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _mouse_callback);
-        emscripten_set_keypress_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _key_callback);
-        emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _key_callback);
-        emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, 1, _key_callback);
-    }
-#endif
-
-#if defined(_WIN32)
-    _is_mobile = false;
-    glfwSetErrorCallback(_glfw_error_callback);
-    if (!glfwInit()) {
-        std::cout << "Failed to create glfw context on this device" << std::endl;
-        std::terminate();
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    _glfw_window = glfwCreateWindow(1600, 900, "stchat", NULL, NULL);
-    if (!_glfw_window) {
-        std::cout << "Failed to create glfw window on this device" << std::endl;
-        std::terminate();
-    }
-    glfwSetKeyCallback(_glfw_window, _glfw_key_callback);
-    glfwSetCursorPosCallback(_glfw_window, _glfw_mouse_position_callback);
-    glfwSetMouseButtonCallback(_glfw_window, _glfw_mouse_button_callback);
-    glfwMakeContextCurrent(_glfw_window);
-    glfwSetWindowFocusCallback(_glfw_window, _glfw_window_focus_callback);
-    gladLoadGL(glfwGetProcAddress);
-    glfwSwapInterval(1);
-#endif
-}
-
 static void _update()
 {
+#if defined(__EMSCRIPTEN__)
+    if (!_is_filesystem_ready) {
+        return;
+    }
+#endif
+
 #if defined(_WIN32)
     glfwPollEvents();
 #endif
