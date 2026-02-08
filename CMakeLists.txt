@@ -212,12 +212,31 @@ else()
 endif()
 set_target_properties(stegano_chat PROPERTIES CXX_STANDARD 17)
 target_link_libraries(stegano_chat PRIVATE cereal imgui libsodium zlib libpng)
+if(ANDROID)
+    set(android_native_app_glue_dir ${ANDROID_NDK}/sources/android/native_app_glue)
+    add_library(android_native_app_glue STATIC ${android_native_app_glue_dir}/android_native_app_glue.c)
+    target_include_directories(android_native_app_glue PUBLIC ${android_native_app_glue_dir})
+    target_link_libraries(stegano_chat PRIVATE EGL android log android_native_app_glue)
+endif()
 if(NOT EMSCRIPTEN AND NOT ANDROID)
     target_link_libraries(stegano_chat PRIVATE glfw nativefiledialog)
 endif()
 target_include_directories(stegano_chat PRIVATE "source")
 if(MSVC)
     target_compile_definitions(stegano_chat PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+if(ANDROID)
+    set(android_platform_dir "${CMAKE_CURRENT_LIST_DIR}/platform/android")
+    set(android_build_so "${CMAKE_CURRENT_BINARY_DIR}/libstegano_chat.so")
+    set(android_jnilibs_dir "${android_platform_dir}/src/main/jniLibs/${ANDROID_ABI}")
+    set(android_jnilibs_so "${android_jnilibs_dir}/libstegano_chat.so")
+    add_custom_command(
+        TARGET stegano_chat POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${android_jnilibs_dir}
+        COMMAND ${CMAKE_COMMAND} -E copy ${android_build_so} ${android_jnilibs_so}
+        COMMAND ${CMAKE_COMMAND} -E chdir ${android_platform_dir} ${ANDROID_GRADLEW} assemble$<IF:$<CONFIG:Debug>,Debug,Release>
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${android_platform_dir}/build/outputs/apk/$<IF:$<CONFIG:Debug>,debug,release> ${CMAKE_CURRENT_BINARY_DIR}
+        USES_TERMINAL)
 endif()
 if(EMSCRIPTEN)
     set_target_properties(stegano_chat PROPERTIES 
@@ -328,17 +347,33 @@ else()
     else()
         set(ANDROID_GRADLEW "gradlew")
     endif()
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/android")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/android/armeabi-v7a")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/android/arm64-v8a")
     add_custom_target(stegano_chat_android
         ALL
         COMMAND "${CMAKE_COMMAND}" -Wno-dev 
             -S "${CMAKE_CURRENT_LIST_DIR}" 
-            -B "${CMAKE_CURRENT_BINARY_DIR}/android" 
+            -B "${CMAKE_CURRENT_BINARY_DIR}/android/armeabi-v7a" 
             -G "Ninja" 
             -DCMAKE_TOOLCHAIN_FILE=${ANDROID_TOOLCHAIN}
             -DCMAKE_BUILD_TYPE=$<CONFIG>
+            -DANDROID_GRADLEW=${ANDROID_GRADLEW}
+            -DANDROID_PLATFORM=24
+            -DANDROID_ABI=armeabi-v7a
+        COMMAND "${CMAKE_COMMAND}" -Wno-dev 
+            -S "${CMAKE_CURRENT_LIST_DIR}" 
+            -B "${CMAKE_CURRENT_BINARY_DIR}/android/arm64-v8a" 
+            -G "Ninja" 
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_TOOLCHAIN}
+            -DCMAKE_BUILD_TYPE=$<CONFIG>
+            -DANDROID_GRADLEW=${ANDROID_GRADLEW}
+            -DANDROID_PLATFORM=24
+            -DANDROID_ABI=arm64-v8a
         COMMAND "${CMAKE_COMMAND}" 
-            --build "${CMAKE_CURRENT_BINARY_DIR}/android"
+            --build "${CMAKE_CURRENT_BINARY_DIR}/android/armeabi-v7a"
+            --target "stegano_chat"
+        COMMAND "${CMAKE_COMMAND}" 
+            --build "${CMAKE_CURRENT_BINARY_DIR}/android/arm64-v8a"
             --target "stegano_chat"
         VERBATIM
         USES_TERMINAL)

@@ -6,7 +6,7 @@
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <android/log.h>
-// #include <android_native_app_glue.h>
+#include <android_native_app_glue.h>
 #endif
 
 #if defined(__EMSCRIPTEN__)
@@ -372,11 +372,17 @@ static void _update_loop()
 
 }
 
+#if defined(__ANDROID__)
+extern "C" void android_main(struct android_app* app)
+#else
 int main()
+#endif
 {
     _setup_platform();
     _setup_opengl();
     _setup_imgui();
     _update_loop();
+#if !defined(__ANDROID__)
     return 0;
+#endif
 }
