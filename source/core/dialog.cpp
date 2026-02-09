@@ -2,6 +2,15 @@
 #include <sstream>
 #include <utility>
 
+#if defined(__ANDROID__)
+#include <android/asset_manager_jni.h>
+#include <android/log.h>
+#include <android/native_activity.h>
+#include <jni.h>
+extern JavaVM* _jni_jvm;
+extern jobject _jni_activity;
+#endif
+
 #if defined(__EMSCRIPTEN__)
 #include <atomic>
 #include <emscripten.h>
@@ -76,6 +85,24 @@ EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
 {
     std::string _filters;
 
+#if defined(__ANDROID__)
+    for (const std::pair<const std::string, std::string>& _filter : filters) {
+        if (!_filters.empty()) {
+            _filters += ",";
+        }
+        const std::string& _extension = _filter.second;
+        if (_extension == ".png") {
+            _filters += "image/png";
+        } else if (_extension == ".jpg" || _extension == ".jpeg") {
+            _filters += "image/jpeg";
+        } else if (_extension == ".txt") {
+            _filters += "text/plain";
+        } else {
+            _filters += "*/*";
+        }
+    }
+#endif
+
 #if defined(__EMSCRIPTEN__)
     for (const std::pair<const std::string, std::string>& _filter : filters) {
         if (!_filters.empty()) {
@@ -126,18 +153,33 @@ EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
         }
     }
 #endif
+
     return _filters;
 }
 
 [[nodiscard]] inline std::filesystem::path _root_path()
 {
-#if defined(__EMSCRIPTEN__)
-    return "/data";
+#if defined(__ANDROID__)
+    JNIEnv* _jni_env = nullptr;
+    _jni_jvm->AttachCurrentThread(&_jni_env, nullptr);
+    jclass _jni_activity_class = _jni_env->GetObjectClass(_jni_activity);
+    jmethodID _jni_get_files_dir_method = _jni_env->GetMethodID(_jni_activity_class, "getFilesDir", "()Ljava/io/File;");
+    jobject _jni_file_object = _jni_env->CallObjectMethod(_jni_activity, _jni_get_files_dir_method);
+    jclass _jni_file_class = _jni_env->GetObjectClass(_jni_file_object);
+    jmethodID _jni_get_absolute_path_method = _jni_env->GetMethodID(_jni_file_class, "getAbsolutePath", "()Ljava/lang/String;");
+    jstring _jni_rootpath = (jstring)_jni_env->CallObjectMethod(_jni_file_object, _jni_get_absolute_path_method);
+    const char* _rootpath_cstr = _jni_env->GetStringUTFChars(_jni_rootpath, nullptr);
+    std::filesystem::path _rootpath(_rootpath_cstr);
+    _jni_env->ReleaseStringUTFChars(_jni_rootpath, _rootpath_cstr);
+    _jni_env->DeleteLocalRef(_jni_rootpath);
+    _jni_env->DeleteLocalRef(_jni_file_class);
+    _jni_env->DeleteLocalRef(_jni_file_object);
+    _jni_env->DeleteLocalRef(_jni_activity_class);
+    return _rootpath;
 #endif
 
-#if defined(__ANDROID__)
-    // extern std::filesystem::path g_android_files_dir;
-    // return g_android_files_dir;
+#if defined(__EMSCRIPTEN__)
+    return "/data";
 #endif
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
@@ -160,17 +202,36 @@ void save_dialog(
     if (!callback) {
         throw std::runtime_error("nullptr save_dialog callback");
     }
+    std::string _filename = default_path.empty() ? "download.bin" : default_path.filename().string();
 
 #if defined(__ANDROID__)
-
+    (void)filters;
+    JNIEnv* _jni_env = nullptr;
+    _jni_jvm->AttachCurrentThread(&_jni_env, nullptr);
+    jclass _jni_activity_class = _jni_env->GetObjectClass(_jni_activity);
+    jmethodID _jni_save_file_method = _jni_env->GetMethodID(_jni_activity_class, "saveFileDialog", "(Ljava/lang/String;)Ljava/lang/String;");
+    jstring _jni_filename = _jni_env->NewStringUTF(_filename.c_str());
+    jstring _jni_filepath = (jstring)_jni_env->CallObjectMethod(_jni_activity, _jni_save_file_method, _jni_filename);
+    const char* _filepath_cstr = _jni_env->GetStringUTFChars(_jni_filepath, nullptr);
+    std::string _filepath(_filepath_cstr);
+    _jni_env->ReleaseStringUTFChars(_jni_filepath, _filepath_cstr);
+    _jni_env->DeleteLocalRef(_jni_filename);
+    _jni_env->DeleteLocalRef(_jni_filepath);
+    _jni_env->DeleteLocalRef(_jni_activity_class);
+    if (!_filepath.empty()) {
+        std::ofstream _ostream(_filepath, std::ios::binary);
+        if (_ostream.good()) {
+            callback(_ostream);
+        }
+    }
 #endif
 
 #if defined(__EMSCRIPTEN__)
+    (void)filters;
     std::ostringstream _ostream;
     callback(_ostream);
     std::string _data = _ostream.str();
-    std::string _filename = default_path.empty() ? "download.bin" : default_path.filename().string();
-    EM_ASM_({
+    EM_ASM({
         const _name = UTF8ToString($0);
         const _ptr = $1;
         const _length = $2;
@@ -188,16 +249,16 @@ void save_dialog(
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     std::string _filters = _build_filters(filters);
     const char* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
-    nfdchar_t* _path_cstr = nullptr;
+    nfdchar_t* _filepath_cstr = nullptr;
     if (NFD_SaveDialog(
             _filters_cstr,
-            default_path.empty() ? nullptr : default_path.string().c_str(),
-            &_path_cstr)
+            _filename.c_str(),
+            &_filepath_cstr)
         != NFD_OKAY) {
         return;
     }
-    std::ofstream _ostream(_path_cstr, std::ios::binary);
-    free(_path_cstr);
+    std::ofstream _ostream(_filepath_cstr, std::ios::binary);
+    free(_filepath_cstr);
     if (_ostream.good()) {
         callback(_ostream);
     }
@@ -212,14 +273,32 @@ void load_dialog(
     if (!callback) {
         throw std::runtime_error("nullptr load_dialog callback");
     }
-
     std::string _filters = _build_filters(filters);
 
 #if defined(__ANDROID__)
-
+    (default_path);
+    JNIEnv* _jni_env = nullptr;
+    _jni_jvm->AttachCurrentThread(&_jni_env, nullptr);
+    jclass _jni_activity_class = _jni_env->GetObjectClass(_jni_activity);
+    jmethodID _jni_open_file_method = _jni_env->GetMethodID(_jni_activity_class, "openFileDialog", "(Ljava/lang/String;)Ljava/lang/String;");
+    jstring _jni_filters = _jni_env->NewStringUTF(_filters.c_str());
+    jstring _jni_filepath = (jstring)_jni_env->CallObjectMethod(_jni_activity, _jni_open_file_method, _jni_filters);
+    const char* _filepath_cstr = _jni_env->GetStringUTFChars(_jni_filepath, nullptr);
+    std::string _filepath(_filepath_cstr);
+    _jni_env->ReleaseStringUTFChars(_jni_filepath, _filepath_cstr);
+    _jni_env->DeleteLocalRef(_jni_filters);
+    _jni_env->DeleteLocalRef(_jni_filepath);
+    _jni_env->DeleteLocalRef(_jni_activity_class);
+    if (!_filepath.empty()) {
+        std::ifstream _istream(_filepath, std::ios::binary);
+        if (_istream.good()) {
+            callback(_istream);
+        }
+    }
 #endif
 
 #if defined(__EMSCRIPTEN__)
+    (default_path);
     char* _path_cstr = _upload_file(_filters.c_str());
     if (_path_cstr) {
         std::ifstream _istream(_path_cstr, std::ios::binary);

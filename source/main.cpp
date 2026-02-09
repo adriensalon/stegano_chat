@@ -10,6 +10,7 @@
 #include <android/log.h>
 #include <android_native_app_glue.h>
 #include <backends/imgui_impl_android.h>
+#include <jni.h>
 #include <thread>
 #include <unistd.h>
 #endif
@@ -36,10 +37,12 @@
 
 #if defined(__ANDROID__)
 android_app* _android_app = nullptr;
+JavaVM* _jni_jvm;
+jobject _jni_activity;
 #endif
 
 namespace {
-    
+
 static void _setup_opengl();
 static void _setup_imgui();
 
