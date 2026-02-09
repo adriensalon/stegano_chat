@@ -2,11 +2,16 @@
 #include <iostream>
 #include <stdexcept>
 
+#include <imgui.h>
+
 #if defined(__ANDROID__)
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#include <backends/imgui_impl_android.h>
+#include <thread>
+#include <unistd.h>
 #endif
 
 #if defined(__EMSCRIPTEN__)
@@ -16,7 +21,7 @@
 #include <emscripten/html5.h>
 #endif
 
-#if defined(_WIN32)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 #define GLFW_INCLUDE_NONE
 #define GLAD_GL_IMPLEMENTATION
 #include <GLFW/glfw3.h>
@@ -29,7 +34,69 @@
 #include <view/app.hpp>
 #include <view/theme.hpp>
 
+#if defined(__ANDROID__)
+android_app* _android_app = nullptr;
+#endif
+
 namespace {
+    
+static void _setup_opengl();
+static void _setup_imgui();
+
+#if defined(__ANDROID__)
+static EGLDisplay _android_display = EGL_NO_DISPLAY;
+static EGLSurface _android_surface = EGL_NO_SURFACE;
+static EGLContext _android_context = EGL_NO_CONTEXT;
+static bool _android_has_window = false;
+static bool _android_engine_initialized = false;
+
+void _android_redirect_stdio_to_log()
+{
+    int _pfd[2];
+    pipe(_pfd);
+    dup2(_pfd[1], STDOUT_FILENO);
+    dup2(_pfd[1], STDERR_FILENO);
+    std::thread([=]() {
+        char _buf[256];
+        ssize_t _r;
+        while ((_r = read(_pfd[0], _buf, sizeof(_buf) - 1)) > 0) {
+            _buf[_r] = 0;
+            __android_log_write(ANDROID_LOG_INFO, "SteganoChat", _buf);
+        }
+    }).detach();
+}
+
+static int32_t _android_on_input(android_app* app, AInputEvent* event)
+{
+    return ImGui_ImplAndroid_HandleInputEvent(event);
+}
+
+static void _android_on_app_cmd(android_app* app, int32_t cmd)
+{
+    switch (cmd) {
+    case APP_CMD_INIT_WINDOW:
+        if (app->window != nullptr) {
+            _setup_opengl();
+            _setup_imgui();
+            _android_engine_initialized = true;
+        }
+        break;
+
+    case APP_CMD_TERM_WINDOW:
+        ImGui_ImplAndroid_Shutdown();
+        // destroy_opengl();
+        break;
+
+    case APP_CMD_INPUT_CHANGED:
+        std::cout << "APP_CMD_INPUT_CHANGED, inputQueue = " << app->inputQueue << "\n";
+        break;
+
+    case APP_CMD_DESTROY:
+        // destroy_opengl();
+        break;
+    }
+}
+#endif
 
 #if defined(__EMSCRIPTEN__)
 EM_JS(float, _window_get_dpr, (), {
@@ -188,7 +255,7 @@ void _setup_filesystem()
 
 #endif
 
-#if defined(_WIN32)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 static GLFWwindow* _glfw_window = nullptr;
 
 static void _glfw_window_focus_callback(GLFWwindow* window, int focused)
@@ -223,6 +290,12 @@ static bool _is_mobile = false;
 
 static void _setup_platform()
 {
+#if defined(__ANDROID__)
+    _is_mobile = true;
+    _android_app->onAppCmd = _android_on_app_cmd;
+    _android_app->onInputEvent = _android_on_input;
+#endif
+
 #if defined(__EMSCRIPTEN__)
     _is_mobile = _navigator_get_touch_points() > 1;
     if (_is_mobile) {
@@ -247,7 +320,7 @@ static void _setup_platform()
     _setup_filesystem();
 #endif
 
-#if defined(_WIN32)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     _is_mobile = false;
     glfwSetErrorCallback(_glfw_error_callback);
     if (!glfwInit()) {
@@ -274,6 +347,36 @@ static void _setup_platform()
 
 static void _setup_opengl()
 {
+#if defined(__ANDROID__)
+    const EGLint _egl_config_attribs[] = {
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_DEPTH_SIZE, 24,
+        EGL_STENCIL_SIZE, 8,
+        EGL_NONE
+    };
+    const EGLint _egl_context_attribs[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 3,
+        EGL_NONE
+    };
+    _android_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    eglInitialize(_android_display, nullptr, nullptr);
+    EGLConfig _egl_config;
+    EGLint _egl_configs_count;
+    eglChooseConfig(_android_display, _egl_config_attribs, &_egl_config, 1, &_egl_configs_count);
+    EGLint _egl_format;
+    eglGetConfigAttrib(_android_display, _egl_config, EGL_NATIVE_VISUAL_ID, &_egl_format);
+    ANativeWindow_setBuffersGeometry(_android_app->window, 0, 0, _egl_format);
+    _android_surface = eglCreateWindowSurface(_android_display, _egl_config, _android_app->window, nullptr);
+    _android_context = eglCreateContext(_android_display, _egl_config, EGL_NO_CONTEXT, _egl_context_attribs);
+    eglMakeCurrent(_android_display, _android_surface, _android_surface, _android_context);
+    _android_has_window = true;
+#endif
+
 #if defined(__EMSCRIPTEN__)
     EmscriptenWebGLContextAttributes _webgl_attributes;
     emscripten_webgl_init_context_attributes(&_webgl_attributes);
@@ -295,8 +398,10 @@ static void _setup_imgui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-
-#if defined(_WIN32)
+#if defined(__ANDROID__)
+    ImGui_ImplAndroid_Init(_android_app->window);
+#endif
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     ImGui_ImplGlfw_InitForOpenGL(_glfw_window, true);
 #endif
     ImGui::StyleColorsLight();
@@ -307,63 +412,104 @@ static void _setup_imgui()
     ImGui_ImplOpenGL3_Init("#version 300 es");
 }
 
-static void _update()
+static void _update_poll_events()
 {
-#if defined(__EMSCRIPTEN__)
-    if (!_is_filesystem_ready) {
-        return;
-    }
-#endif
-
-#if defined(_WIN32)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     glfwPollEvents();
 #endif
+}
 
-    // get screen size
+static void _update_screen_size()
+{
+#if defined(__ANDROID__)
+    eglQuerySurface(_android_display, _android_surface, EGL_WIDTH, &_screen_width);
+    eglQuerySurface(_android_display, _android_surface, EGL_HEIGHT, &_screen_height);
+#endif
 #if defined(__EMSCRIPTEN__)
     _screen_width = _canvas_get_width();
     _screen_height = _canvas_get_height();
 #endif
-#if defined(_WIN32)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     glfwGetFramebufferSize(_glfw_window, &_screen_width, &_screen_height);
 #endif
-    if (_screen_width == 0 && _screen_height == 0) {
-        return;
-    }
+}
 
-    // clear
-    glViewport(0, 0, _screen_width, _screen_height);
-    glClearColor(1, 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    // imgui platform backend new frame
-#if defined(_WIN32)
-    ImGui_ImplGlfw_NewFrame();
+static void _update_swap_buffers()
+{
+#if defined(__ANDROID__)
+    eglSwapBuffers(_android_display, _android_surface);
 #endif
-    ImGui::GetIO().DisplaySize = ImVec2(static_cast<float>(_screen_width), static_cast<float>(_screen_height));
-
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui::NewFrame();
-    draw_app();
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    // swap buffers
-#if defined(_WIN32)
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     glfwSwapBuffers(_glfw_window);
+#endif
+}
+
+static void _update_imgui_platform_new_frame()
+{
+#if defined(__ANDROID__)
+    ImGui_ImplAndroid_NewFrame();
+#endif
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    ImGui_ImplGlfw_NewFrame();
 #endif
 }
 
 static void _update_loop()
 {
 #if defined(__EMSCRIPTEN__)
-    emscripten_set_main_loop(_update, 0, EM_TRUE);
+    if (!_is_filesystem_ready) {
+        return; // TODO ASYNCIFY EM_ASYN_JS instead
+    }
+#endif
+    _update_poll_events();
+    _update_screen_size();
+    if (_screen_width == 0 && _screen_height == 0) {
+        return;
+    }
+    glViewport(0, 0, _screen_width, _screen_height);
+    glClearColor(1, 1, 1, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    _update_imgui_platform_new_frame();
+    ImGui::GetIO().DisplaySize = ImVec2(static_cast<float>(_screen_width), static_cast<float>(_screen_height));
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui::NewFrame();
+    draw_app();
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    _update_swap_buffers();
+}
+
+static void _setup_update()
+{
+#if defined(__ANDROID__)
+    while (true) {
+        int _ident;
+        int _events_count;
+        android_poll_source* _poll_source = nullptr;
+        while ((_ident = ALooper_pollOnce(_android_has_window ? 0 : -1, nullptr, &_events_count, (void**)&_poll_source)) >= 0) {
+            if (_poll_source) {
+                _poll_source->process(_android_app, _poll_source);
+            }
+            if (_android_app->destroyRequested) {
+                // lucaria::destroy_opengl();
+                // lucaria::destroy_openal();
+                return;
+            }
+        }
+        if (_android_engine_initialized && _android_has_window && _android_surface != EGL_NO_SURFACE) {
+            _update_loop();
+        }
+    }
+#endif
+
+#if defined(__EMSCRIPTEN__)
+    emscripten_set_main_loop(_update_loop, 0, EM_TRUE);
     emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
 #endif
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     while (!glfwWindowShouldClose(_glfw_window)) {
-        _update();
+        _update_loop();
     }
     glfwDestroyWindow(_glfw_window);
     glfwTerminate();
@@ -378,10 +524,15 @@ extern "C" void android_main(struct android_app* app)
 int main()
 #endif
 {
+#if defined(__ANDROID__)
+    _android_app = app;
+#endif
     _setup_platform();
+#if !defined(__ANDROID__)
     _setup_opengl();
     _setup_imgui();
-    _update_loop();
+#endif
+    _setup_update();
 #if !defined(__ANDROID__)
     return 0;
 #endif
