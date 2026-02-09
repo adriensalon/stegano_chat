@@ -16,9 +16,9 @@ void draw_diagram(const std::array<std::uint8_t, 32>& public_key, const float si
             const int _byte_index = _bit_index / 8;
             const int _bit_in_byte = 7 - (_bit_index % 8);
             const bool _bit = (public_key[_byte_index] >> _bit_in_byte) & 1;
-            if (_bit) {
                 const ImVec2 _start_pos = { _cursor_pos.x + _x_index * _pixel_size, _cursor_pos.y + _y_index * _pixel_size };
                 const ImVec2 _end_pos = { _start_pos.x + _pixel_size, _start_pos.y + _pixel_size };
+            if (_bit) {
                 _drawlist->AddRectFilled(_start_pos, _end_pos, _color);
             }
         }

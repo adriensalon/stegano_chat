@@ -4,6 +4,7 @@
 #include <imgui.h>
 
 #include <core/user.hpp>
+#include <view/diagram.hpp>
 #include <view/theme.hpp>
 
 extern std::optional<chat_user> _memory_user;
@@ -70,6 +71,10 @@ void draw_contacts()
 
         // 4) Draw text inside the card
         ImGui::SetCursorScreenPos(card_min + ImGui::GetStyle().WindowPadding * 2);
+        
+        draw_diagram(_contact.contact_public_key, 50);
+        ImGui::SameLine();
+
         ImGui::TextUnformatted(_contact.display.c_str());
 
         ImGui::SetCursorScreenPos(card_min + ImGui::GetStyle().WindowPadding * 2 + ImVec2(0, 28));

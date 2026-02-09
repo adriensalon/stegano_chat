@@ -134,8 +134,8 @@ void draw_app()
         {
             bold_icon_font_scoped _font;
             ImGui::SetCursorPos(ImGui::GetStyle().WindowPadding * 2 + ImVec2(0, 30));
-            draw_diagram(_memory_user->public_key, 50.f);
-            ImGui::SameLine();
+            // draw_diagram(_memory_user->public_key, 50.f);
+            // ImGui::SameLine();
             ImGui::TextUnformatted(_memory_username.c_str());
 
             // DEMO
