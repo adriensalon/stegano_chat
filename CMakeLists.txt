@@ -161,24 +161,7 @@ configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/external/libpng/scripts/pnglibconf.h.prebuilt"
     "${CMAKE_CURRENT_BINARY_DIR}/external/libpng/pnglibconf.h"
     @ONLY)
-set(libpng_public_hdrs
-    "external/libpng/png.h"
-    "external/libpng/pngconf.h"
-    "${CMAKE_CURRENT_BINARY_DIR}/external/libpng/pnglibconf.h")
-set(libpng_private_hdrs
-    "external/libpng/pngpriv.h"
-    "external/libpng/pngdebug.h"
-    "external/libpng/pnginfo.h"
-    "external/libpng/pngstruct.h")
 set(libpng_sources
-    # ${libpng_arm_sources}
-    # ${libpng_intel_sources}
-    # ${libpng_mips_sources}
-    # ${libpng_powerpc_sources}
-    # ${libpng_loongarch_sources}
-    # ${libpng_riscv_sources}
-    ${libpng_public_hdrs}
-    ${libpng_private_hdrs}
     "external/libpng/png.c"
     "external/libpng/pngerror.c"
     "external/libpng/pngget.c"
@@ -194,9 +177,14 @@ set(libpng_sources
     "external/libpng/pngwrite.c"
     "external/libpng/pngwtran.c"
     "external/libpng/pngwutil.c")
+if(ANDROID)
+    list(APPEND libpng_sources 
+        "external/libpng/arm/arm_init.c"
+        "external/libpng/arm/filter_neon_intrinsics.c"
+        "external/libpng/arm/palette_neon_intrinsics.c")
+endif()
 add_library(libpng STATIC EXCLUDE_FROM_ALL ${libpng_sources})
-target_include_directories(libpng PUBLIC "external/libpng")
-target_include_directories(libpng PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/external/libpng")
+target_include_directories(libpng PUBLIC "external/libpng" "${CMAKE_CURRENT_BINARY_DIR}/external/libpng")
 target_link_libraries(libpng PRIVATE zlib)
 if(MSVC)
     target_compile_definitions(libpng PRIVATE _CRT_SECURE_NO_WARNINGS)
