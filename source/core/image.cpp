@@ -14,32 +14,28 @@
 
 namespace {
 
-#if defined(__EMSCRIPTEN__)
-void _download_file(const char* path)
+void _png_ostream_write(png_structp png_ptr, png_bytep data, png_size_t length)
 {
-    EM_ASM({
-        const _path = UTF8ToString($0);
-        const _data = FS.readFile(_path);
-        const _blob = new Blob([_data], { type: 'application/octet-stream' });
-        const _url = URL.createObjectURL(_blob);
-        const _element = document.createElement('a');
-        _element.href = _url;
-        _element.download = _path.split('/').pop();
-        document.body.appendChild(_element);
-        _element.click();
-        document.body.removeChild(_element);
-        URL.revokeObjectURL(_url); }, path);
-}
-#endif
-
-}
-
-void save_image(const std::filesystem::path& image_path, const chat_image& image)
-{
-    FILE* _file_ptr = fopen(image_path.string().c_str(), "wb");
-    if (!_file_ptr) {
-        throw std::runtime_error("failed to open output file");
+    std::ostream* stream = reinterpret_cast<std::ostream*>(png_get_io_ptr(png_ptr));
+    if (!stream->write(reinterpret_cast<char*>(data), length)) {
+        png_error(png_ptr, "Write error to std::ostream");
     }
+}
+
+void _png_istream_read(png_structp png_ptr, png_bytep outBytes, png_size_t byteCountToRead)
+{
+    std::istream* stream = reinterpret_cast<std::istream*>(png_get_io_ptr(png_ptr));
+    if (!stream->read(reinterpret_cast<char*>(outBytes), byteCountToRead)) {
+        png_error(png_ptr, "Read error from std::istream");
+    }
+}
+
+}
+
+void save_image(
+    std::ostream& image_stream,
+    const chat_image& image)
+{
     png_structp _png_write = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!_png_write) {
         throw std::runtime_error("png_create_write_struct failed");
@@ -51,7 +47,7 @@ void save_image(const std::filesystem::path& image_path, const chat_image& image
     if (setjmp(png_jmpbuf(_png_write))) {
         throw std::runtime_error("libpng write error");
     }
-    png_init_io(_png_write, _file_ptr);
+    png_set_write_fn(_png_write, &image_stream, _png_ostream_write, nullptr);
     png_set_IHDR(_png_write, _png_info, static_cast<png_uint_32>(image.width), static_cast<png_uint_32>(image.height), 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
     // METADATA WIP
@@ -76,20 +72,13 @@ void save_image(const std::filesystem::path& image_path, const chat_image& image
     }
     png_write_image(_png_write, _rows.data());
     png_write_end(_png_write, nullptr);
-    fclose(_file_ptr);
     png_destroy_write_struct(&_png_write, &_png_info);
-
-#if defined(__EMSCRIPTEN__)
-    _download_file(image_path.string().c_str());
-#endif
 }
 
-void load_image(const std::filesystem::path& image_path, chat_image& image)
+void load_image(
+    std::istream& image_stream,
+    chat_image& image)
 {
-    FILE* _file_ptr = fopen(image_path.string().c_str(), "rb");
-    if (!_file_ptr) {
-        throw std::runtime_error("Failed to open image");
-    }
     png_structp _png_read = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!_png_read) {
         throw std::runtime_error("png_create_read_struct failed");
@@ -101,7 +90,7 @@ void load_image(const std::filesystem::path& image_path, chat_image& image)
     if (setjmp(png_jmpbuf(_png_read))) {
         throw std::runtime_error("libpng read error");
     }
-    png_init_io(_png_read, _file_ptr);
+    png_set_read_fn(_png_read, &image_stream, _png_istream_read);
     png_read_info(_png_read, _png_info);
     const int _width = png_get_image_width(_png_read, _png_info);
     const int _height = png_get_image_height(_png_read, _png_info);
@@ -145,6 +134,5 @@ void load_image(const std::filesystem::path& image_path, chat_image& image)
     }
     // METADATA WIP
 
-    fclose(_file_ptr);
     png_destroy_read_struct(&_png_read, &_png_info, nullptr);
 }

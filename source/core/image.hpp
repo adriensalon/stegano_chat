@@ -14,9 +14,9 @@ struct chat_image {
 };
 
 void save_image(
-    const std::filesystem::path& image_path, 
+    std::ostream& image_stream, 
     const chat_image& image);
 
 void load_image(
-    const std::filesystem::path& image_path, 
+    std::istream& image_stream, 
     chat_image& image);

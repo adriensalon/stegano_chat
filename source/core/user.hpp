@@ -29,12 +29,11 @@ struct chat_user {
 };
 
 void save_user(
-    const std::filesystem::path& user_path,
+    std::ostream& user_stream,
     const chat_user& user,
-    const std::string& password,
-    const bool is_download = false);
+    const std::string& password);
 
 bool load_user(
-    const std::filesystem::path& user_path,
+    std::istream& user_stream,
     chat_user& user,
     const std::string& password);

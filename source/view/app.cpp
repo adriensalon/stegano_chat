@@ -50,10 +50,14 @@ void _draw_user_settings()
             }
             if (ImGui::Button("export public key...", ImVec2(_available_width, 0))) {
                 std::filesystem::path _file_path;
-                if (save_dialog(_file_path, "", { { "Text", "*.txt" } })) {
-                    std::ofstream _fstream(_file_path, std::ios::binary);
-                    _fstream.write(reinterpret_cast<const char*>(_memory_user->public_key.data()), 32);
-                }
+                // if (save_dialog(_file_path, "", { { "Text", "*.txt" } })) {
+                //     std::ofstream _fstream(_file_path, std::ios::binary);
+                //     _fstream.write(reinterpret_cast<const char*>(_memory_user->public_key.data()), 32);
+                // }
+                save_dialog([](std::ostream& _stream) {
+                    _stream.write(reinterpret_cast<const char*>(_memory_user->public_key.data()), 32);
+                },
+                    "public_key.txt", { { "Text", "*.txt" } });
             }
             if (ImGui::Button("close", ImVec2(_available_width, 0))) {
                 ImGui::CloseCurrentPopup();
@@ -84,16 +88,26 @@ void _draw_add_contact()
             }
             if (ImGui::Button("import public key...", ImVec2(_available_width, 0))) {
                 std::filesystem::path _file_path;
-                if (load_dialog(_file_path, "", { { "Text", "*.txt" } })) {
-                    std::ifstream _fstream(_file_path, std::ios::binary);
+                // if (load_dialog(_file_path, "", { { "Text", "*.txt" } })) {
+                //     std::ifstream _fstream(_file_path, std::ios::binary);
+                //     std::array<std::uint8_t, 32> _read_public_key;
+                //     _fstream.read(reinterpret_cast<char*>(_read_public_key.data()), 32);
+                //     _memory_user->contacts.emplace_back().contact_public_key = _read_public_key;
+                //     _memory_user->contacts.back().display = _add_user_display;
+                //     // save_user()
+                //     _add_user_display.clear();
+                //     ImGui::CloseCurrentPopup();
+                // }
+                load_dialog([](std::istream& _stream) {
                     std::array<std::uint8_t, 32> _read_public_key;
-                    _fstream.read(reinterpret_cast<char*>(_read_public_key.data()), 32);
+                    _stream.read(reinterpret_cast<char*>(_read_public_key.data()), 32);
                     _memory_user->contacts.emplace_back().contact_public_key = _read_public_key;
                     _memory_user->contacts.back().display = _add_user_display;
                     // save_user()
                     _add_user_display.clear();
                     ImGui::CloseCurrentPopup();
-                }
+                },
+                    "", { { "Text", "*.txt" } });
             }
             if (ImGui::Button("close", ImVec2(_available_width, 0))) {
                 _add_user_display.clear();
@@ -192,17 +206,27 @@ void draw_app()
         if (ImGui::Button(_send_button_id.c_str(), ImVec2(_button_width, 0))) {
             // TODO
             chat_image _image, _result_image;
-            load_image("input.png", _image);
-            
+            load_stream([&](std::istream& _stream) {
+                load_image(_stream, _image);
+            },
+                "input.png");
+
             const std::list<chat_contact>::iterator _iterator = std::next(_memory_user->contacts.begin(), _memory_contact_index.value());
             if (send_message(_image, _memory_user->public_key, _memory_user->private_key, _iterator->contact_public_key, _memory_chat_text, _result_image)) {
                 std::filesystem::path _file_path;
-                if (save_dialog(_file_path, "", { { "Image", "*.png" } })) {
-                    save_image(_file_path, _result_image);
+                // if (save_dialog(_file_path, "", { { "Image", "*.png" } })) {
+                //     save_image(_file_path, _result_image);
+                //     _iterator->messages.emplace_back().direction = chat_message_direction::sent;
+                //     _iterator->messages.back().plaintext = _memory_chat_text;
+                //     _memory_chat_text.clear();
+                // }
+                save_dialog([&](std::ostream& _stream) {
+                    save_image(_stream, _result_image);
                     _iterator->messages.emplace_back().direction = chat_message_direction::sent;
                     _iterator->messages.back().plaintext = _memory_chat_text;
                     _memory_chat_text.clear();
-                }
+                },
+                    "sent_message.png", { { "Image", "*.png" } });
             }
         }
         ImGui::SameLine();
@@ -210,16 +234,27 @@ void draw_app()
         if (ImGui::Button(_receive_button_id.c_str(), ImVec2(_button_width, 0))) {
             // TODO
             std::filesystem::path _file_path;
-            if (load_dialog(_file_path, "", { { "Image", "*.png" } })) {
+            // if (load_dialog(_file_path, "", { { "Image", "*.png" } })) {
+            //     chat_image _image;
+            //     load_image(_file_path, _image);
+            //     const std::list<chat_contact>::iterator _iterator = std::next(_memory_user->contacts.begin(), _memory_contact_index.value());
+            //     std::optional<std::string> _message;
+            //     if (receive_message(_image, _memory_user->public_key, _memory_user->private_key, _iterator->contact_public_key, _message)) {
+            //         _iterator->messages.emplace_back().direction = chat_message_direction::received;
+            //         _iterator->messages.back().plaintext = _message.value();
+            //     }
+            // }
+            load_dialog([](std::istream& _stream) {
                 chat_image _image;
-                load_image(_file_path, _image);
+                load_image(_stream, _image);
                 const std::list<chat_contact>::iterator _iterator = std::next(_memory_user->contacts.begin(), _memory_contact_index.value());
                 std::optional<std::string> _message;
                 if (receive_message(_image, _memory_user->public_key, _memory_user->private_key, _iterator->contact_public_key, _message)) {
                     _iterator->messages.emplace_back().direction = chat_message_direction::received;
                     _iterator->messages.back().plaintext = _message.value();
                 }
-            }
+            },
+                "", { { "Image", "*.png" } });
         }
         _draw_user_settings();
         _draw_add_contact();

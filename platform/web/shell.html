@@ -55,6 +55,15 @@
 			monitorRunDependencies: function(left) {
 			}
 		};
+		
+		if (typeof Module.getRandomValue !== "function") {
+			Module.getRandomValue = function(ptr, length) {
+				if (!Module.HEAPU8) 
+					throw new Error("Module.HEAPU8 not ready");
+				const u8 = Module.HEAPU8.subarray(ptr, ptr + length);
+				crypto.getRandomValues(u8);
+			};
+		}
 
 		window.onerror = function() {
 			console.log("onerror: " + event);

@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <misc/cpp/imgui_stdlib.h>
 
+#include <core/dialog.hpp>
 #include <core/transport.hpp>
 #include <core/user.hpp>
 #include <view/theme.hpp>
@@ -80,10 +81,15 @@ void draw_login()
             const std::filesystem::path _userprofile_path = _memory_username + ".userprofile";
             // const std::filesystem::path _userprofile_path = "data/" + _memory_username + ".userprofile";
             chat_user _user;
-            if (std::filesystem::exists(_userprofile_path)
-                && load_user(_userprofile_path, _user, _memory_userpass)) {
-                _memory_user = _user;
-            } else {
+            bool _is_userprofile_loaded = false;
+            load_stream([&](std::istream& _stream) {
+                if (load_user(_stream, _user, _memory_userpass)) {
+                    _memory_user = _user;
+                    _is_userprofile_loaded = true;
+                }
+            },
+                _userprofile_path);
+            if (!_is_userprofile_loaded) {
                 _is_notify_login_failed = true;
             }
         }
@@ -92,10 +98,20 @@ void draw_login()
         if (ImGui::Button("create local userprofile", ImVec2(_login_width, 0))) {
             const std::filesystem::path _userprofile_path = _memory_username + ".userprofile";
             // const std::filesystem::path _userprofile_path = "data/" + _memory_username + ".userprofile";
-            if (!std::filesystem::exists(_userprofile_path)) {
+            bool _is_userprofile_present = false;
+            load_stream([&](std::istream& _stream) {
+                (void)_stream;
+                _is_userprofile_present = true;
+            },
+                _userprofile_path);
+
+            if (!_is_userprofile_present) {
                 _memory_user = chat_user();
                 create_keys(_memory_user->public_key, _memory_user->private_key);
-                save_user(_userprofile_path, _memory_user.value(), _memory_userpass, false);
+                save_stream([&](std::ostream& _stream) {
+                    save_user(_stream, _memory_user.value(), _memory_userpass);
+                },
+                    _userprofile_path);
             } else {
                 _is_notify_login_failed = true;
             }

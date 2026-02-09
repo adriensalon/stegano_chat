@@ -1,8 +1,6 @@
-#include <filesystem>
-#include <iostream>
-#include <string>
+#include <fstream>
+#include <sstream>
 #include <utility>
-#include <vector>
 
 #if defined(__EMSCRIPTEN__)
 #include <atomic>
@@ -13,9 +11,12 @@
 #include <nfd.h>
 #endif
 
+#include <core/dialog.hpp>
+
 namespace {
 
 #if defined(__EMSCRIPTEN__)
+
 // clang-format off
 EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
     const _accept = UTF8ToString(types_json);
@@ -68,6 +69,7 @@ EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
     });
 });
 // clang-format on
+
 #endif
 
 [[nodiscard]] static std::string _build_filters(const std::vector<std::pair<std::string, std::string>>& filters)
@@ -127,52 +129,106 @@ EM_ASYNC_JS(char*, _upload_file, (const char* types_json), {
     return _filters;
 }
 
+[[nodiscard]] inline std::filesystem::path _root_path()
+{
+#if defined(__EMSCRIPTEN__)
+    return "/data";
+#endif
+
+#if defined(__ANDROID__)
+    // extern std::filesystem::path g_android_files_dir;
+    // return g_android_files_dir;
+#endif
+
+#if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    return std::filesystem::current_path() / "data";
+#endif
 }
 
-bool save_dialog(
-    std::filesystem::path& file_path,
+[[nodiscard]] inline std::filesystem::path _resolve_path(const std::filesystem::path& relative)
+{
+    return _root_path() / relative;
+}
+
+}
+
+void save_dialog(
+    const std::function<void(std::ostream&)>& callback,
     const std::filesystem::path& default_path,
     const std::vector<std::pair<std::string, std::string>>& filters)
 {
-#if defined(__EMSCRIPTEN__)
-    if (default_path.empty()) {
-        return false;
+    if (!callback) {
+        throw std::runtime_error("nullptr save_dialog callback");
     }
-    file_path = default_path.filename();
+
+#if defined(__ANDROID__)
+
+#endif
+
+#if defined(__EMSCRIPTEN__)
+    std::ostringstream _ostream;
+    callback(_ostream);
+    std::string _data = _ostream.str();
+    std::string _filename = default_path.empty() ? "download.bin" : default_path.filename().string();
+    EM_ASM_({
+        const _name = UTF8ToString($0);
+        const _ptr = $1;
+        const _length = $2;
+        const _blob = new Blob([HEAPU8.subarray(_ptr, _ptr + _length)], { type: "application/octet-stream" });
+        const _element = document.createElement("a");
+        _element.href = URL.createObjectURL(_blob);
+        _element.download = _name;
+        document.body.appendChild(_element);
+        _element.click();
+        document.body.removeChild(_element);
+        URL.revokeObjectURL(_element.href); }, _filename.c_str(), reinterpret_cast<int>(_data.data()), static_cast<int>(_data.size()));
+
 #endif
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
     std::string _filters = _build_filters(filters);
-    const nfdchar_t* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
+    const char* _filters_cstr = _filters.empty() ? nullptr : _filters.c_str();
     nfdchar_t* _path_cstr = nullptr;
     if (NFD_SaveDialog(
             _filters_cstr,
             default_path.empty() ? nullptr : default_path.string().c_str(),
             &_path_cstr)
         != NFD_OKAY) {
-        return false;
+        return;
     }
-    file_path = std::filesystem::path(_path_cstr);
+    std::ofstream _ostream(_path_cstr, std::ios::binary);
     free(_path_cstr);
+    if (_ostream.good()) {
+        callback(_ostream);
+    }
 #endif
-
-    return true;
 }
 
-bool load_dialog(
-    std::filesystem::path& file_path,
+void load_dialog(
+    const std::function<void(std::istream&)>& callback,
     const std::filesystem::path& default_path,
     const std::vector<std::pair<std::string, std::string>>& filters)
 {
+    if (!callback) {
+        throw std::runtime_error("nullptr load_dialog callback");
+    }
+
     std::string _filters = _build_filters(filters);
+
+#if defined(__ANDROID__)
+
+#endif
 
 #if defined(__EMSCRIPTEN__)
     char* _path_cstr = _upload_file(_filters.c_str());
-    if (!_path_cstr) {
-        return false;
+    if (_path_cstr) {
+        std::ifstream _istream(_path_cstr, std::ios::binary);
+        free(_path_cstr);
+        if (_istream.good()) {
+            callback(_istream);
+        }
+        // delete temp file
     }
-    file_path = std::filesystem::path(_path_cstr);
-    free(_path_cstr);
 #endif
 
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
@@ -183,11 +239,46 @@ bool load_dialog(
             default_path.empty() ? nullptr : default_path.string().c_str(),
             &_path_cstr)
         != NFD_OKAY) {
-        return false;
+        return;
     }
-    file_path = std::filesystem::path(_path_cstr);
+    std::ifstream _istream(_path_cstr, std::ios::binary);
     free(_path_cstr);
+    if (_istream.good()) {
+        callback(_istream);
+    }
 #endif
+}
 
-    return true;
+void save_stream(
+    const std::function<void(std::ostream&)>& callback,
+    const std::filesystem::path& file_path)
+{
+    const std::filesystem::path _resolved_path = _resolve_path(file_path);
+    std::ofstream _stream(_resolved_path, std::ios::binary);
+    if (!_stream) {
+        throw std::runtime_error("failed to open file for writing " + _resolved_path.string());
+    }
+    callback(_stream);
+
+#if defined(__EMSCRIPTEN__)
+    EM_ASM({
+        FS.syncfs(function(_err) {
+            if (_err)
+                console.error(_err);
+        });
+    });
+#endif
+}
+
+void load_stream(
+    const std::function<void(std::istream&)>& callback,
+    const std::filesystem::path& file_path)
+{
+    const std::filesystem::path _resolved_path = _resolve_path(file_path);
+    if (std::filesystem::exists(_resolved_path)) {
+        std::ifstream _stream(_resolved_path, std::ios::binary);
+        if (_stream) {
+            callback(_stream);
+        }
+    }
 }
